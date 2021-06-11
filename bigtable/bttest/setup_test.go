@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	emptypb "github.com/golang/protobuf/ptypes/empty"
@@ -34,7 +35,11 @@ func newClient(t *testing.T) (context.Context, *clientIntf, bool) {
 	}
 
 	svr := &server{
-		tables: make(map[string]*table),
+		tables:  make(map[string]*table),
+		storage: BtreeStorage{},
+		clock: func() time.Time {
+			return time.Unix(0, 0).UTC()
+		},
 	}
 
 	cl := &clientIntf{

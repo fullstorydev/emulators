@@ -42,11 +42,11 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	emptypb "github.com/golang/protobuf/ptypes/empty"
 	"github.com/golang/protobuf/ptypes/wrappers"
-	"github.com/google/btree"
 	btapb "google.golang.org/genproto/googleapis/bigtable/admin/v2"
 	btpb "google.golang.org/genproto/googleapis/bigtable/v2"
 	statpb "google.golang.org/genproto/googleapis/rpc/status"
@@ -82,9 +82,12 @@ type Server struct {
 // It is a separate and unexported type so the API won't be cluttered with
 // methods that are only relevant to the fake's implementation.
 type server struct {
+	storage Storage
+	clock   func() time.Time
+
 	mu     sync.Mutex
 	tables map[string]*table // keyed by fully qualified name
-	gcc    chan int          // set when gcloop starts, closed when server shuts down
+	done   chan struct{}     // closed when server shuts down
 
 	// Any unimplemented methods will return unimplemented.
 	*btapb.UnimplementedBigtableTableAdminServer
@@ -96,6 +99,31 @@ type server struct {
 // The Server will be listening for gRPC connections, without TLS,
 // on the provided address. The resolved address is named by the Addr field.
 func NewServer(laddr string, opt ...grpc.ServerOption) (*Server, error) {
+	return NewServerWithOptions(laddr, Options{
+		GrpcOpts: opt,
+	})
+}
+
+type Options struct {
+	// A storage layer to use; if nil, defaults to BtreeStorage.
+	Storage Storage
+	// The clock to use use; if nil, defaults to time.Now().
+	Clock func() time.Time
+
+	// Grpc server options.
+	GrpcOpts []grpc.ServerOption
+}
+
+// NewServerWithOptions creates a new Server with the given options.
+// The Server will be listening for gRPC connections, without TLS,
+// on the provided address. The resolved address is named by the Addr field.
+func NewServerWithOptions(laddr string, opt Options) (*Server, error) {
+	if opt.Storage == nil {
+		opt.Storage = BtreeStorage{}
+	}
+	if opt.Clock == nil {
+		opt.Clock = time.Now
+	}
 	l, err := net.Listen("tcp", laddr)
 	if err != nil {
 		return nil, err
@@ -104,30 +132,53 @@ func NewServer(laddr string, opt ...grpc.ServerOption) (*Server, error) {
 	s := &Server{
 		Addr: l.Addr().String(),
 		l:    l,
-		srv:  grpc.NewServer(opt...),
+		srv:  grpc.NewServer(opt.GrpcOpts...),
 		s: &server{
-			tables: make(map[string]*table),
+			storage: opt.Storage,
+			tables:  make(map[string]*table),
+			clock:   opt.Clock,
+			done:    make(chan struct{}),
 		},
 	}
+
+	// Init from storage.
+	for _, tbl := range s.s.storage.GetTables() {
+		rows := s.s.storage.Open(tbl)
+		s.s.tables[tbl.Name] = newTable(tbl, rows)
+	}
+
 	btapb.RegisterBigtableInstanceAdminServer(s.srv, s.s)
 	btapb.RegisterBigtableTableAdminServer(s.srv, s.s)
 	btpb.RegisterBigtableServer(s.srv, s.s)
 
-	go s.srv.Serve(s.l)
+	go func() {
+		_ = s.srv.Serve(s.l)
+	}()
+	go s.s.gcloop()
 
 	return s, nil
 }
 
 // Close shuts down the server.
 func (s *Server) Close() {
+	close(s.s.done)
+	s.srv.Stop()
+	_ = s.l.Close()
+
+	var tbls []*table
 	s.s.mu.Lock()
-	if s.s.gcc != nil {
-		close(s.s.gcc)
+	for _, t := range s.s.tables {
+		tbls = append(tbls, t)
 	}
 	s.s.mu.Unlock()
 
-	s.srv.Stop()
-	s.l.Close()
+	for _, tbl := range s.s.tables {
+		func() {
+			tbl.mu.Lock()
+			defer tbl.mu.Unlock()
+			tbl.rows.Close()
+		}()
+	}
 }
 
 func (s *server) CreateTable(ctx context.Context, req *btapb.CreateTableRequest) (*btapb.Table, error) {
@@ -138,7 +189,13 @@ func (s *server) CreateTable(ctx context.Context, req *btapb.CreateTableRequest)
 		s.mu.Unlock()
 		return nil, status.Errorf(codes.AlreadyExists, "table %q already exists", tbl)
 	}
-	s.tables[tbl] = newTable(req)
+	if req.Table == nil {
+		req.Table = &btapb.Table{}
+	}
+	req.Table.Name = tbl
+	rows := s.storage.Create(req.Table)
+	s.tables[tbl] = newTable(req.Table, rows)
+
 	s.mu.Unlock()
 
 	ct := &btapb.Table{
@@ -168,19 +225,16 @@ func (s *server) ListTables(ctx context.Context, req *btapb.ListTablesRequest) (
 }
 
 func (s *server) GetTable(ctx context.Context, req *btapb.GetTableRequest) (*btapb.Table, error) {
-	tbl := req.Name
-
 	s.mu.Lock()
-	tblIns, ok := s.tables[tbl]
+	tbl, ok := s.tables[req.Name]
 	s.mu.Unlock()
 	if !ok {
-		return nil, status.Errorf(codes.NotFound, "table %q not found", tbl)
+		return nil, status.Errorf(codes.NotFound, "table %q not found", req.Name)
 	}
 
-	return &btapb.Table{
-		Name:           tbl,
-		ColumnFamilies: toColumnFamilies(tblIns.columnFamilies()),
-	}, nil
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return tbl.def, nil
 }
 
 func (s *server) DeleteTable(ctx context.Context, req *btapb.DeleteTableRequest) (*emptypb.Empty, error) {
@@ -203,53 +257,43 @@ func (s *server) ModifyColumnFamilies(ctx context.Context, req *btapb.ModifyColu
 
 	tbl.mu.Lock()
 	defer tbl.mu.Unlock()
+	cfs := tbl.def.ColumnFamilies
 
 	for _, mod := range req.Modifications {
 		if create := mod.GetCreate(); create != nil {
-			if _, ok := tbl.families[mod.Id]; ok {
+			if _, ok := cfs[mod.Id]; ok {
 				return nil, status.Errorf(codes.AlreadyExists, "family %q already exists", mod.Id)
 			}
-			newcf := &columnFamily{
-				name:   req.Name + "/columnFamilies/" + mod.Id,
-				order:  tbl.counter,
-				gcRule: create.GcRule,
+			cfs[mod.Id] = &btapb.ColumnFamily{
+				GcRule: create.GcRule,
 			}
-			tbl.counter++
-			tbl.families[mod.Id] = newcf
 		} else if mod.GetDrop() {
-			if _, ok := tbl.families[mod.Id]; !ok {
+			if _, ok := cfs[mod.Id]; !ok {
 				return nil, fmt.Errorf("can't delete unknown family %q", mod.Id)
 			}
-			delete(tbl.families, mod.Id)
+			delete(cfs, mod.Id)
 
 			// Purge all data for this column family
-			tbl.rows.Ascend(func(i btree.Item) bool {
-				r := i.(*row)
-				r.mu.Lock()
-				defer r.mu.Unlock()
-				delete(r.families, mod.Id)
+			tbl.rows.Ascend(func(r *btpb.Row) bool {
+				r, changed := scrubRow(r, tbl.cols())
+				if changed {
+					tbl.rows.ReplaceOrInsert(r)
+				}
 				return true
 			})
 		} else if modify := mod.GetUpdate(); modify != nil {
-			if _, ok := tbl.families[mod.Id]; !ok {
+			cf, ok := cfs[mod.Id]
+			if !ok {
 				return nil, fmt.Errorf("no such family %q", mod.Id)
-			}
-			newcf := &columnFamily{
-				name:   req.Name + "/columnFamilies/" + mod.Id,
-				gcRule: modify.GcRule,
 			}
 			// assume that we ALWAYS want to replace by the new setting
 			// we may need partial update through
-			tbl.families[mod.Id] = newcf
+			cf.GcRule = modify.GcRule
 		}
 	}
 
-	s.needGC()
-	return &btapb.Table{
-		Name:           req.Name,
-		ColumnFamilies: toColumnFamilies(tbl.families),
-		Granularity:    btapb.Table_TimestampGranularity(btapb.Table_MILLIS),
-	}, nil
+	s.storage.SetTableMeta(tbl.def)
+	return tbl.def, nil
 }
 
 func (s *server) DropRowRange(ctx context.Context, req *btapb.DropRowRangeRequest) (*emptypb.Empty, error) {
@@ -263,23 +307,21 @@ func (s *server) DropRowRange(ctx context.Context, req *btapb.DropRowRangeReques
 	tbl.mu.Lock()
 	defer tbl.mu.Unlock()
 	if req.GetDeleteAllDataFromTable() {
-		tbl.rows = btree.New(btreeDegree)
+		tbl.rows.Clear()
 	} else {
 		// Delete rows by prefix.
 		prefixBytes := req.GetRowKeyPrefix()
 		if prefixBytes == nil {
 			return nil, fmt.Errorf("missing row key prefix")
 		}
-		prefix := string(prefixBytes)
 
-		// The BTree does not specify what happens if rows are deleted during
+		// Rows does not specify what happens if rows are deleted during
 		// iteration, and it provides no "delete range" method.
 		// So we collect the rows first, then delete them one by one.
-		var rowsToDelete []*row
-		tbl.rows.AscendGreaterOrEqual(btreeKey(prefix), func(i btree.Item) bool {
-			r := i.(*row)
-			if strings.HasPrefix(r.key, prefix) {
-				rowsToDelete = append(rowsToDelete, r)
+		var rowsToDelete []keyType
+		tbl.rows.AscendGreaterOrEqual(prefixBytes, func(r *btpb.Row) bool {
+			if bytes.HasPrefix(r.Key, prefixBytes) {
+				rowsToDelete = append(rowsToDelete, r.Key)
 				return true
 			}
 			return false // stop iteration
@@ -335,63 +377,62 @@ func (s *server) ReadRows(req *btpb.ReadRowsRequest, stream btpb.Bigtable_ReadRo
 
 	// Rows to read can be specified by a set of row keys and/or a set of row ranges.
 	// Output is a stream of sorted, de-duped rows.
-	tbl.mu.RLock()
-	rowSet := make(map[string]*row)
+	rowSet := func() map[string]*btpb.Row {
+		defer tbl.read()
+		tbl.mu.RLock()
+		defer tbl.mu.RUnlock()
 
-	addRow := func(i btree.Item) bool {
-		r := i.(*row)
-		rowSet[r.key] = r
-		return true
-	}
-
-	if req.Rows != nil &&
-		len(req.Rows.RowKeys)+len(req.Rows.RowRanges) > 0 {
-		// Add the explicitly given keys
-		for _, key := range req.Rows.RowKeys {
-			k := string(key)
-			if i := tbl.rows.Get(btreeKey(k)); i != nil {
-				addRow(i)
-			}
+		rowSet := make(map[string]*btpb.Row)
+		addRow := func(r *btpb.Row) bool {
+			rowSet[string(r.Key)] = r
+			return true
 		}
 
-		// Add keys from row ranges
-		for _, rr := range req.Rows.RowRanges {
-			var start, end string
-			switch sk := rr.StartKey.(type) {
-			case *btpb.RowRange_StartKeyClosed:
-				start = string(sk.StartKeyClosed)
-			case *btpb.RowRange_StartKeyOpen:
-				start = string(sk.StartKeyOpen) + "\x00"
+		if req.Rows != nil &&
+			len(req.Rows.RowKeys)+len(req.Rows.RowRanges) > 0 {
+			// Add the explicitly given keys
+			for _, key := range req.Rows.RowKeys {
+				if i := tbl.rows.Get(key); i != nil {
+					addRow(i)
+				}
 			}
-			switch ek := rr.EndKey.(type) {
-			case *btpb.RowRange_EndKeyClosed:
-				end = string(ek.EndKeyClosed) + "\x00"
-			case *btpb.RowRange_EndKeyOpen:
-				end = string(ek.EndKeyOpen)
-			}
-			switch {
-			case start == "" && end == "":
-				tbl.rows.Ascend(addRow) // all rows
-			case start == "":
-				tbl.rows.AscendLessThan(btreeKey(end), addRow)
-			case end == "":
-				tbl.rows.AscendGreaterOrEqual(btreeKey(start), addRow)
-			default:
-				tbl.rows.AscendRange(btreeKey(start), btreeKey(end), addRow)
-			}
-		}
-	} else {
-		// Read all rows
-		tbl.rows.Ascend(addRow)
-	}
-	tbl.mu.RUnlock()
 
-	rows := make([]*row, 0, len(rowSet))
+			// Add keys from row ranges
+			for _, rr := range req.Rows.RowRanges {
+				var start, end keyType
+				switch sk := rr.StartKey.(type) {
+				case *btpb.RowRange_StartKeyClosed:
+					start = sk.StartKeyClosed
+				case *btpb.RowRange_StartKeyOpen:
+					start = append(sk.StartKeyOpen, 0)
+				}
+				switch ek := rr.EndKey.(type) {
+				case *btpb.RowRange_EndKeyClosed:
+					end = append(ek.EndKeyClosed, 0)
+				case *btpb.RowRange_EndKeyOpen:
+					end = ek.EndKeyOpen
+				}
+				switch {
+				case len(start) == 0 && len(end) == 0:
+					tbl.rows.Ascend(addRow) // all rows
+				case len(start) == 0:
+					tbl.rows.AscendLessThan(end, addRow)
+				case len(end) == 0:
+					tbl.rows.AscendGreaterOrEqual(start, addRow)
+				default:
+					tbl.rows.AscendRange(start, end, addRow)
+				}
+			}
+		} else {
+			// Read all rows
+			tbl.rows.Ascend(addRow)
+		}
+		return rowSet
+	}()
+
+	rows := make([]*btpb.Row, 0, len(rowSet))
 	for _, r := range rowSet {
-		r.mu.Lock()
-		fams := len(r.families)
-		r.mu.Unlock()
-
+		fams := len(r.Families)
 		if fams != 0 {
 			rows = append(rows, r)
 		}
@@ -404,7 +445,7 @@ func (s *server) ReadRows(req *btpb.ReadRowsRequest, stream btpb.Bigtable_ReadRo
 		if limit > 0 && count >= limit {
 			return nil
 		}
-		streamed, err := streamRow(stream, r, req.Filter)
+		streamed, err := streamRow(stream, tbl.cols(), r, req.Filter)
 		if err != nil {
 			return err
 		}
@@ -417,12 +458,7 @@ func (s *server) ReadRows(req *btpb.ReadRowsRequest, stream btpb.Bigtable_ReadRo
 
 // streamRow filters the given row and sends it via the given stream.
 // Returns true if at least one cell matched the filter and was streamed, false otherwise.
-func streamRow(stream btpb.Bigtable_ReadRowsServer, r *row, f *btpb.RowFilter) (bool, error) {
-	r.mu.Lock()
-	nr := r.copy()
-	r.mu.Unlock()
-	r = nr
-
+func streamRow(stream btpb.Bigtable_ReadRowsServer, cols map[string]*btapb.ColumnFamily, r *btpb.Row, f *btpb.RowFilter) (bool, error) {
 	match, err := filterRow(f, r)
 	if err != nil {
 		return false, err
@@ -432,21 +468,21 @@ func streamRow(stream btpb.Bigtable_ReadRowsServer, r *row, f *btpb.RowFilter) (
 	}
 
 	rrr := &btpb.ReadRowsResponse{}
-	families := r.sortedFamilies()
-	for _, fam := range families {
-		for _, colName := range fam.colNames {
-			cells := fam.cells[colName]
+	scrubRow(r, cols)
+	for _, fam := range r.Families {
+		for _, col := range fam.Columns {
+			cells := col.Cells
 			if len(cells) == 0 {
 				continue
 			}
 			for _, cell := range cells {
 				rrr.Chunks = append(rrr.Chunks, &btpb.ReadRowsResponse_CellChunk{
-					RowKey:          []byte(r.key),
-					FamilyName:      &wrappers.StringValue{Value: fam.name},
-					Qualifier:       &wrappers.BytesValue{Value: []byte(colName)},
-					TimestampMicros: cell.ts,
-					Value:           cell.value,
-					Labels:          cell.labels,
+					RowKey:          r.Key,
+					FamilyName:      &wrappers.StringValue{Value: fam.Name},
+					Qualifier:       &wrappers.BytesValue{Value: col.Qualifier},
+					TimestampMicros: cell.TimestampMicros,
+					Value:           cell.Value,
+					Labels:          cell.Labels,
 				})
 			}
 		}
@@ -462,7 +498,7 @@ func streamRow(stream btpb.Bigtable_ReadRowsServer, r *row, f *btpb.RowFilter) (
 
 // filterRow modifies a row with the given filter. Returns true if at least one cell from the row matches,
 // false otherwise. If a filter is invalid, filterRow returns false and an error.
-func filterRow(f *btpb.RowFilter, r *row) (bool, error) {
+func filterRow(f *btpb.RowFilter, r *btpb.Row) (bool, error) {
 	if f == nil {
 		return true, nil
 	}
@@ -496,9 +532,9 @@ func filterRow(f *btpb.RowFilter, r *row) (bool, error) {
 		if len(f.Interleave.Filters) < 2 {
 			return false, status.Errorf(codes.InvalidArgument, "Interleave must contain at least two RowFilters")
 		}
-		srs := make([]*row, 0, len(f.Interleave.Filters))
+		srs := make([]*btpb.Row, 0, len(f.Interleave.Filters))
 		for _, sub := range f.Interleave.Filters {
-			sr := r.copy()
+			sr := copyRow(r)
 			match, err := filterRow(sub, sr)
 			if err != nil {
 				return false, err
@@ -509,35 +545,36 @@ func filterRow(f *btpb.RowFilter, r *row) (bool, error) {
 		}
 		// merge
 		// TODO(dsymonds): is this correct?
-		r.families = make(map[string]*family)
+		r.Families = nil
 		for _, sr := range srs {
-			for _, fam := range sr.families {
-				f := r.getOrCreateFamily(fam.name, fam.order)
-				for colName, cs := range fam.cells {
-					f.cells[colName] = append(f.cellsByColumn(colName), cs...)
+			for _, fam := range sr.Families {
+				f := getOrCreateFamily(r, fam.Name)
+				for _, col := range fam.Columns {
+					c := getOrCreateColumn(f, col.Qualifier)
+					c.Cells = append(c.Cells, col.Cells...)
 				}
 			}
 		}
 		var count int
-		for _, fam := range r.families {
-			for _, cs := range fam.cells {
-				sort.Sort(byDescTS(cs))
-				count += len(cs)
+		for _, fam := range r.Families {
+			for _, col := range fam.Columns {
+				sort.Sort(byDescTS(col.Cells))
+				count += len(col.Cells)
 			}
 		}
 		return count > 0, nil
 	case *btpb.RowFilter_CellsPerColumnLimitFilter:
 		lim := int(f.CellsPerColumnLimitFilter)
-		for _, fam := range r.families {
-			for col, cs := range fam.cells {
-				if len(cs) > lim {
-					fam.cells[col] = cs[:lim]
+		for _, fam := range r.Families {
+			for _, col := range fam.Columns {
+				if len(col.Cells) > lim {
+					col.Cells = col.Cells[:lim]
 				}
 			}
 		}
 		return true, nil
 	case *btpb.RowFilter_Condition_:
-		match, err := filterRow(f.Condition.PredicateFilter, r.copy())
+		match, err := filterRow(f.Condition.PredicateFilter, copyRow(r))
 		if err != nil {
 			return false, err
 		}
@@ -556,20 +593,19 @@ func filterRow(f *btpb.RowFilter, r *row) (bool, error) {
 		if err != nil {
 			return false, status.Errorf(codes.InvalidArgument, "Error in field 'rowkey_regex_filter' : %v", err)
 		}
-		if !rx.MatchString(r.key) {
+		if !rx.Match(r.Key) {
 			return false, nil
 		}
 	case *btpb.RowFilter_CellsPerRowLimitFilter:
 		// Grab the first n cells in the row.
 		lim := int(f.CellsPerRowLimitFilter)
-		for _, fam := range r.families {
-			for _, col := range fam.colNames {
-				cs := fam.cells[col]
-				if len(cs) > lim {
-					fam.cells[col] = cs[:lim]
+		for _, fam := range r.Families {
+			for _, col := range fam.Columns {
+				if len(col.Cells) > lim {
+					col.Cells = col.Cells[:lim]
 					lim = 0
 				} else {
-					lim -= len(cs)
+					lim -= len(col.Cells)
 				}
 			}
 		}
@@ -577,16 +613,14 @@ func filterRow(f *btpb.RowFilter, r *row) (bool, error) {
 	case *btpb.RowFilter_CellsPerRowOffsetFilter:
 		// Skip the first n cells in the row.
 		offset := int(f.CellsPerRowOffsetFilter)
-		for _, fam := range r.families {
-			for _, col := range fam.colNames {
-				cs := fam.cells[col]
-				if len(cs) > offset {
-					fam.cells[col] = cs[offset:]
-					offset = 0
+		for _, fam := range r.Families {
+			for _, col := range fam.Columns {
+				if len(col.Cells) > offset {
+					col.Cells = col.Cells[offset:]
 					return true, nil
 				}
-				fam.cells[col] = cs[:0]
-				offset -= len(cs)
+				col.Cells = col.Cells[:0]
+				offset -= len(col.Cells)
 			}
 		}
 		return true, nil
@@ -602,14 +636,14 @@ func filterRow(f *btpb.RowFilter, r *row) (bool, error) {
 
 	// Any other case, operate on a per-cell basis.
 	cellCount := 0
-	for _, fam := range r.families {
-		for colName, cs := range fam.cells {
-			filtered, err := filterCells(f, fam.name, colName, cs)
+	for _, fam := range r.Families {
+		for _, col := range fam.Columns {
+			filtered, err := filterCells(f, fam.Name, col.Qualifier, col.Cells)
 			if err != nil {
 				return false, err
 			}
-			fam.cells[colName] = filtered
-			cellCount += len(fam.cells[colName])
+			col.Cells = filtered
+			cellCount += len(col.Cells)
 		}
 	}
 	return cellCount > 0, nil
@@ -617,8 +651,8 @@ func filterRow(f *btpb.RowFilter, r *row) (bool, error) {
 
 var randFloat = rand.Float64
 
-func filterCells(f *btpb.RowFilter, fam, col string, cs []cell) ([]cell, error) {
-	var ret []cell
+func filterCells(f *btpb.RowFilter, fam string, col []byte, cs []*btpb.Cell) ([]*btpb.Cell, error) {
+	var ret []*btpb.Cell
 	for _, cell := range cs {
 		include, err := includeCell(f, fam, col, cell)
 		if err != nil {
@@ -635,29 +669,33 @@ func filterCells(f *btpb.RowFilter, fam, col string, cs []cell) ([]cell, error) 
 	return ret, nil
 }
 
-func modifyCell(f *btpb.RowFilter, c cell) (cell, error) {
+func modifyCell(f *btpb.RowFilter, c *btpb.Cell) (*btpb.Cell, error) {
 	if f == nil {
 		return c, nil
 	}
 	// Consider filters that may modify the cell contents
 	switch filter := f.Filter.(type) {
 	case *btpb.RowFilter_StripValueTransformer:
-		return cell{ts: c.ts}, nil
+		return &btpb.Cell{TimestampMicros: c.TimestampMicros}, nil
 	case *btpb.RowFilter_ApplyLabelTransformer:
 		if !validLabelTransformer.MatchString(filter.ApplyLabelTransformer) {
-			return cell{}, status.Errorf(
+			return &btpb.Cell{}, status.Errorf(
 				codes.InvalidArgument,
 				`apply_label_transformer must match RE2([a-z0-9\-]+), but found %v`,
 				filter.ApplyLabelTransformer,
 			)
 		}
-		return cell{ts: c.ts, value: c.value, labels: []string{filter.ApplyLabelTransformer}}, nil
+		return &btpb.Cell{
+			TimestampMicros: c.TimestampMicros,
+			Value:           c.Value,
+			Labels:          []string{filter.ApplyLabelTransformer},
+		}, nil
 	default:
 		return c, nil
 	}
 }
 
-func includeCell(f *btpb.RowFilter, fam, col string, cell cell) (bool, error) {
+func includeCell(f *btpb.RowFilter, fam string, col []byte, cell *btpb.Cell) (bool, error) {
 	if f == nil {
 		return true, nil
 	}
@@ -689,32 +727,32 @@ func includeCell(f *btpb.RowFilter, fam, col string, cell cell) (bool, error) {
 		if err != nil {
 			return false, status.Errorf(codes.InvalidArgument, "Error in field 'column_qualifier_regex_filter' : %v", err)
 		}
-		return rx.MatchString(col), nil
+		return rx.Match(col), nil
 	case *btpb.RowFilter_ValueRegexFilter:
 		rx, err := newRegexp(f.ValueRegexFilter)
 		if err != nil {
 			return false, status.Errorf(codes.InvalidArgument, "Error in field 'value_regex_filter' : %v", err)
 		}
-		return rx.Match(cell.value), nil
+		return rx.Match(cell.Value), nil
 	case *btpb.RowFilter_ColumnRangeFilter:
 		if fam != f.ColumnRangeFilter.FamilyName {
 			return false, nil
 		}
 		// Start qualifier defaults to empty string closed
-		inRangeStart := func() bool { return col >= "" }
+		inRangeStart := func() bool { return bytes.Compare(col, nil) >= 0 }
 		switch sq := f.ColumnRangeFilter.StartQualifier.(type) {
 		case *btpb.ColumnRange_StartQualifierOpen:
-			inRangeStart = func() bool { return col > string(sq.StartQualifierOpen) }
+			inRangeStart = func() bool { return bytes.Compare(col, sq.StartQualifierOpen) > 0 }
 		case *btpb.ColumnRange_StartQualifierClosed:
-			inRangeStart = func() bool { return col >= string(sq.StartQualifierClosed) }
+			inRangeStart = func() bool { return bytes.Compare(col, sq.StartQualifierClosed) >= 0 }
 		}
 		// End qualifier defaults to no upper boundary
 		inRangeEnd := func() bool { return true }
 		switch eq := f.ColumnRangeFilter.EndQualifier.(type) {
 		case *btpb.ColumnRange_EndQualifierClosed:
-			inRangeEnd = func() bool { return col <= string(eq.EndQualifierClosed) }
+			inRangeEnd = func() bool { return bytes.Compare(col, eq.EndQualifierClosed) <= 0 }
 		case *btpb.ColumnRange_EndQualifierOpen:
-			inRangeEnd = func() bool { return col < string(eq.EndQualifierOpen) }
+			inRangeEnd = func() bool { return bytes.Compare(col, eq.EndQualifierOpen) < 0 }
 		}
 		return inRangeStart() && inRangeEnd(), nil
 	case *btpb.RowFilter_TimestampRangeFilter:
@@ -723,10 +761,10 @@ func includeCell(f *btpb.RowFilter, fam, col string, cell cell) (bool, error) {
 			return false, status.Errorf(codes.InvalidArgument, "Error in field 'timestamp_range_filter'. Maximum precision allowed in filter is millisecond.\nGot:\nStart: %v\nEnd: %v", f.TimestampRangeFilter.StartTimestampMicros, f.TimestampRangeFilter.EndTimestampMicros)
 		}
 		// Lower bound is inclusive and defaults to 0, upper bound is exclusive and defaults to infinity.
-		return cell.ts >= f.TimestampRangeFilter.StartTimestampMicros &&
-			(f.TimestampRangeFilter.EndTimestampMicros == 0 || cell.ts < f.TimestampRangeFilter.EndTimestampMicros), nil
+		return cell.TimestampMicros >= f.TimestampRangeFilter.StartTimestampMicros &&
+			(f.TimestampRangeFilter.EndTimestampMicros == 0 || cell.TimestampMicros < f.TimestampRangeFilter.EndTimestampMicros), nil
 	case *btpb.RowFilter_ValueRangeFilter:
-		v := cell.value
+		v := cell.Value
 		// Start value defaults to empty string closed
 		inRangeStart := func() bool { return bytes.Compare(v, []byte{}) >= 0 }
 		switch sv := f.ValueRangeFilter.StartValue.(type) {
@@ -789,13 +827,17 @@ func (s *server) MutateRow(ctx context.Context, req *btpb.MutateRowRequest) (*bt
 	if !ok {
 		return nil, status.Errorf(codes.NotFound, "table %q not found", req.TableName)
 	}
-	fs := tbl.columnFamilies()
-	r := tbl.mutableRow(string(req.RowKey))
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if err := applyMutations(tbl, r, req.Mutations, fs); err != nil {
+
+	defer tbl.write()
+	tbl.mu.Lock()
+	defer tbl.mu.Unlock()
+	now := s.clock()
+	r := tbl.getOrCreateRow(req.RowKey)
+
+	if err := applyMutations(tbl, r, req.Mutations, now); err != nil {
 		return nil, err
 	}
+	tbl.updateRow(r)
 	return &btpb.MutateRowResponse{}, nil
 }
 
@@ -808,21 +850,24 @@ func (s *server) MutateRows(req *btpb.MutateRowsRequest, stream btpb.Bigtable_Mu
 	}
 	res := &btpb.MutateRowsResponse{Entries: make([]*btpb.MutateRowsResponse_Entry, len(req.Entries))}
 
-	fs := tbl.columnFamilies()
+	defer tbl.write()
+	tbl.mu.Lock()
+	defer tbl.mu.Unlock()
+	now := s.clock()
 
 	for i, entry := range req.Entries {
-		r := tbl.mutableRow(string(entry.RowKey))
-		r.mu.Lock()
+		r := tbl.getOrCreateRow(entry.RowKey)
+
 		code, msg := int32(codes.OK), ""
-		if err := applyMutations(tbl, r, entry.Mutations, fs); err != nil {
+		if err := applyMutations(tbl, r, entry.Mutations, now); err != nil {
 			code = int32(codes.Internal)
 			msg = err.Error()
 		}
+		tbl.updateRow(r)
 		res.Entries[i] = &btpb.MutateRowsResponse_Entry{
 			Index:  int64(i),
 			Status: &statpb.Status{Code: code, Message: msg},
 		}
-		r.mu.Unlock()
 	}
 	return stream.Send(res)
 }
@@ -836,27 +881,27 @@ func (s *server) CheckAndMutateRow(ctx context.Context, req *btpb.CheckAndMutate
 	}
 	res := &btpb.CheckAndMutateRowResponse{}
 
-	fs := tbl.columnFamilies()
-
-	r := tbl.mutableRow(string(req.RowKey))
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	defer tbl.write()
+	tbl.mu.Lock()
+	defer tbl.mu.Unlock()
+	now := s.clock()
+	r := tbl.getOrCreateRow(req.RowKey)
 
 	// Figure out which mutation to apply.
 	whichMut := false
 	if req.PredicateFilter == nil {
 		// Use true_mutations iff row contains any cells.
-		whichMut = !r.isEmpty()
+		whichMut = !isEmpty(r)
 	} else {
 		// Use true_mutations iff any cells in the row match the filter.
 		// TODO(dsymonds): This could be cheaper.
-		nr := r.copy()
+		nr := copyRow(r)
 
 		match, err := filterRow(req.PredicateFilter, nr)
 		if err != nil {
 			return nil, err
 		}
-		whichMut = match && !nr.isEmpty()
+		whichMut = match && !isEmpty(nr)
 	}
 	res.PredicateMatched = whichMut
 	muts := req.FalseMutations
@@ -864,16 +909,17 @@ func (s *server) CheckAndMutateRow(ctx context.Context, req *btpb.CheckAndMutate
 		muts = req.TrueMutations
 	}
 
-	if err := applyMutations(tbl, r, muts, fs); err != nil {
+	if err := applyMutations(tbl, r, muts, now); err != nil {
 		return nil, err
 	}
+	tbl.updateRow(r)
 	return res, nil
 }
 
 // applyMutations applies a sequence of mutations to a row.
-// fam should be a snapshot of the keys of tbl.families.
 // It assumes r.mu is locked.
-func applyMutations(tbl *table, r *row, muts []*btpb.Mutation, fs map[string]*columnFamily) error {
+func applyMutations(tbl *table, r *btpb.Row, muts []*btpb.Mutation, now time.Time) error {
+	fs := tbl.def.ColumnFamilies
 	for _, mut := range muts {
 		switch mut := mut.Mutation.(type) {
 		default:
@@ -885,77 +931,110 @@ func applyMutations(tbl *table, r *row, muts []*btpb.Mutation, fs map[string]*co
 			}
 			ts := set.TimestampMicros
 			if ts == -1 { // bigtable.ServerTime
-				ts = newTimestamp()
+				ts = newTimestamp(now)
 			}
 			if !tbl.validTimestamp(ts) {
 				return fmt.Errorf("invalid timestamp %d", ts)
 			}
 			fam := set.FamilyName
-			col := string(set.ColumnQualifier)
+			col := set.ColumnQualifier
 
-			newCell := cell{ts: ts, value: set.Value}
-			f := r.getOrCreateFamily(fam, fs[fam].order)
-			f.cells[col] = appendOrReplaceCell(f.cellsByColumn(col), newCell)
+			newCell := &btpb.Cell{TimestampMicros: ts, Value: set.Value}
+			f := getOrCreateFamily(r, fam)
+			c := getOrCreateColumn(f, col)
+			c.Cells = appendOrReplaceCell(c.Cells, newCell)
 		case *btpb.Mutation_DeleteFromColumn_:
 			del := mut.DeleteFromColumn
 			if _, ok := fs[del.FamilyName]; !ok {
 				return fmt.Errorf("unknown family %q", del.FamilyName)
 			}
-			fam := del.FamilyName
-			col := string(del.ColumnQualifier)
-			if _, ok := r.families[fam]; ok {
-				cs := r.families[fam].cells[col]
-				if del.TimeRange != nil {
-					tsr := del.TimeRange
-					if !tbl.validTimestamp(tsr.StartTimestampMicros) {
-						return fmt.Errorf("invalid timestamp %d", tsr.StartTimestampMicros)
-					}
-					if !tbl.validTimestamp(tsr.EndTimestampMicros) && tsr.EndTimestampMicros != 0 {
-						return fmt.Errorf("invalid timestamp %d", tsr.EndTimestampMicros)
-					}
-					if tsr.StartTimestampMicros >= tsr.EndTimestampMicros && tsr.EndTimestampMicros != 0 {
-						return fmt.Errorf("inverted or invalid timestamp range [%d, %d]", tsr.StartTimestampMicros, tsr.EndTimestampMicros)
-					}
-
-					// Find half-open interval to remove.
-					// Cells are in descending timestamp order,
-					// so the predicates to sort.Search are inverted.
-					si, ei := 0, len(cs)
-					if tsr.StartTimestampMicros > 0 {
-						ei = sort.Search(len(cs), func(i int) bool { return cs[i].ts < tsr.StartTimestampMicros })
-					}
-					if tsr.EndTimestampMicros > 0 {
-						si = sort.Search(len(cs), func(i int) bool { return cs[i].ts < tsr.EndTimestampMicros })
-					}
-					if si < ei {
-						copy(cs[si:], cs[ei:])
-						cs = cs[:len(cs)-(ei-si)]
-					}
-				} else {
-					cs = nil
-				}
-				if len(cs) == 0 {
-					delete(r.families[fam].cells, col)
-					colNames := r.families[fam].colNames
-					i := sort.Search(len(colNames), func(i int) bool { return colNames[i] >= col })
-					if i < len(colNames) && colNames[i] == col {
-						r.families[fam].colNames = append(colNames[:i], colNames[i+1:]...)
-					}
-					if len(r.families[fam].cells) == 0 {
-						delete(r.families, fam)
-					}
-				} else {
-					r.families[fam].cells[col] = cs
-				}
+			fam := getFamily(r, del.FamilyName)
+			if fam == nil {
+				break
 			}
+			col := getColumn(fam, del.ColumnQualifier)
+			if col == nil {
+				break
+			}
+			cs := col.Cells
+			if del.TimeRange != nil {
+				tsr := del.TimeRange
+				if !tbl.validTimestamp(tsr.StartTimestampMicros) {
+					return fmt.Errorf("invalid timestamp %d", tsr.StartTimestampMicros)
+				}
+				if !tbl.validTimestamp(tsr.EndTimestampMicros) && tsr.EndTimestampMicros != 0 {
+					return fmt.Errorf("invalid timestamp %d", tsr.EndTimestampMicros)
+				}
+				if tsr.StartTimestampMicros >= tsr.EndTimestampMicros && tsr.EndTimestampMicros != 0 {
+					return fmt.Errorf("inverted or invalid timestamp range [%d, %d]", tsr.StartTimestampMicros, tsr.EndTimestampMicros)
+				}
+
+				// Find half-open interval to remove.
+				// Cells are in descending timestamp order,
+				// so the predicates to sort.Search are inverted.
+				si, ei := 0, len(cs)
+				if tsr.StartTimestampMicros > 0 {
+					ei = sort.Search(len(cs), func(i int) bool { return cs[i].TimestampMicros < tsr.StartTimestampMicros })
+				}
+				if tsr.EndTimestampMicros > 0 {
+					si = sort.Search(len(cs), func(i int) bool { return cs[i].TimestampMicros < tsr.EndTimestampMicros })
+				}
+				if si < ei {
+					copy(cs[si:], cs[ei:])
+					cs = cs[:len(cs)-(ei-si)]
+				}
+			} else {
+				cs = nil
+			}
+			col.Cells = cs
 		case *btpb.Mutation_DeleteFromRow_:
-			r.families = make(map[string]*family)
+			r.Families = nil
 		case *btpb.Mutation_DeleteFromFamily_:
-			fampre := mut.DeleteFromFamily.FamilyName
-			delete(r.families, fampre)
+			if f := getFamily(r, mut.DeleteFromFamily.FamilyName); f != nil {
+				f.Columns = nil
+			}
 		}
 	}
 	return nil
+}
+
+// Remove empty families / columns
+func scrubRow(r *btpb.Row, cols map[string]*btapb.ColumnFamily) (*btpb.Row, bool) {
+	n := len(r.Families)
+	wIdx := 0
+	didChange := false
+	for _, f := range r.Families {
+		cf := cols[f.Name]
+		if cf == nil {
+			continue
+		}
+		var changed bool
+		f, changed = scrubFam(f)
+		didChange = didChange || changed
+		if len(f.Columns) > 0 {
+			r.Families[wIdx] = f
+			wIdx++
+		}
+	}
+	r.Families = r.Families[:wIdx]
+	return r, n != wIdx || didChange
+}
+
+// Remove empty columns
+func scrubFam(f *btpb.Family) (*btpb.Family, bool) {
+	n := len(f.Columns)
+	wIdx := 0
+	for _, c := range f.Columns {
+		if len(c.Cells) > 0 {
+			f.Columns[wIdx] = c
+			wIdx++
+		}
+	}
+	f.Columns = f.Columns[:wIdx]
+	sort.Slice(f.Columns, func(i, j int) bool {
+		return bytes.Compare(f.Columns[i].Qualifier, f.Columns[j].Qualifier) < 0
+	})
+	return f, n != wIdx
 }
 
 func maxTimestamp(x, y int64) int64 {
@@ -965,16 +1044,16 @@ func maxTimestamp(x, y int64) int64 {
 	return y
 }
 
-func newTimestamp() int64 {
-	ts := time.Now().UnixNano() / 1e3
+func newTimestamp(now time.Time) int64 {
+	ts := now.UnixNano() / 1e3
 	ts -= ts % 1000 // round to millisecond granularity
 	return ts
 }
 
-func appendOrReplaceCell(cs []cell, newCell cell) []cell {
+func appendOrReplaceCell(cs []*btpb.Cell, newCell *btpb.Cell) []*btpb.Cell {
 	replaced := false
 	for i, cell := range cs {
-		if cell.ts == newCell.ts {
+		if cell.TimestampMicros == newCell.TimestampMicros {
 			cs[i] = newCell
 			replaced = true
 			break
@@ -995,49 +1074,42 @@ func (s *server) ReadModifyWriteRow(ctx context.Context, req *btpb.ReadModifyWri
 		return nil, status.Errorf(codes.NotFound, "table %q not found", req.TableName)
 	}
 
-	fs := tbl.columnFamilies()
+	defer tbl.write()
+	tbl.mu.Lock()
+	defer tbl.mu.Unlock()
+	now := s.clock()
+	r := tbl.getOrCreateRow(req.RowKey)
+	resultRow := &btpb.Row{Key: req.RowKey} // copy of updated cells
+	cols := tbl.cols()
 
-	rowKey := string(req.RowKey)
-	r := tbl.mutableRow(rowKey)
-	resultRow := newRow(rowKey) // copy of updated cells
-
-	// This must be done before the row lock, acquired below, is released.
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	// Assume all mutations apply to the most recent version of the cell.
 	// TODO(dsymonds): Verify this assumption and document it in the proto.
 	for _, rule := range req.Rules {
-		if _, ok := fs[rule.FamilyName]; !ok {
+		if _, ok := cols[rule.FamilyName]; !ok {
 			return nil, fmt.Errorf("unknown family %q", rule.FamilyName)
 		}
 
-		fam := rule.FamilyName
-		col := string(rule.ColumnQualifier)
-		isEmpty := false
-		f := r.getOrCreateFamily(fam, fs[fam].order)
-		cs := f.cells[col]
-		isEmpty = len(cs) == 0
+		fam := getOrCreateFamily(r, rule.FamilyName)
+		col := getOrCreateColumn(fam, rule.ColumnQualifier)
+		ts := newTimestamp(now)
+		var newCell *btpb.Cell
+		var prevVal []byte
+		if len(col.Cells) > 0 {
+			prevVal = col.Cells[0].Value
 
-		ts := newTimestamp()
-		var newCell, prevCell cell
-		if !isEmpty {
-			cells := r.families[fam].cells[col]
-			prevCell = cells[0]
-
-			// ts is the max of now or the prev cell's timestamp in case the
+			// ts is the max of clock or the prev cell's timestamp in case the
 			// prev cell is in the future
-			ts = maxTimestamp(ts, prevCell.ts)
+			ts = maxTimestamp(ts, col.Cells[0].TimestampMicros)
 		}
 
 		switch rule := rule.Rule.(type) {
 		default:
 			return nil, fmt.Errorf("unknown RMW rule oneof %T", rule)
 		case *btpb.ReadModifyWriteRule_AppendValue:
-			newCell = cell{ts: ts, value: append(prevCell.value, rule.AppendValue...)}
+			newCell = &btpb.Cell{TimestampMicros: ts, Value: append(prevVal, rule.AppendValue...)}
 		case *btpb.ReadModifyWriteRule_IncrementAmount:
 			var v int64
-			if !isEmpty {
-				prevVal := prevCell.value
+			if prevVal != nil {
 				if len(prevVal) != 8 {
 					return nil, fmt.Errorf("increment on non-64-bit value")
 				}
@@ -1046,41 +1118,22 @@ func (s *server) ReadModifyWriteRow(ctx context.Context, req *btpb.ReadModifyWri
 			v += rule.IncrementAmount
 			var val [8]byte
 			binary.BigEndian.PutUint64(val[:], uint64(v))
-			newCell = cell{ts: ts, value: val[:]}
+			newCell = &btpb.Cell{TimestampMicros: ts, Value: val[:]}
 		}
 
 		// Store the new cell
-		f.cells[col] = appendOrReplaceCell(f.cellsByColumn(col), newCell)
+		col.Cells = appendOrReplaceCell(col.Cells, newCell)
 
 		// Store a copy for the result row
-		resultFamily := resultRow.getOrCreateFamily(fam, fs[fam].order)
-		resultFamily.cellsByColumn(col)           // create the column
-		resultFamily.cells[col] = []cell{newCell} // overwrite the cells
+		resultFamily := getOrCreateFamily(resultRow, fam.Name)
+		resultCol := getOrCreateColumn(resultFamily, col.Qualifier)
+		resultCol.Cells = []*btpb.Cell{newCell}
 	}
 
-	// Build the response using the result row
-	res := &btpb.Row{
-		Key:      req.RowKey,
-		Families: make([]*btpb.Family, len(resultRow.families)),
-	}
-
-	for i, family := range resultRow.sortedFamilies() {
-		res.Families[i] = &btpb.Family{
-			Name:    family.name,
-			Columns: make([]*btpb.Column, len(family.colNames)),
-		}
-
-		for j, colName := range family.colNames {
-			res.Families[i].Columns[j] = &btpb.Column{
-				Qualifier: []byte(colName),
-				Cells: []*btpb.Cell{{
-					TimestampMicros: family.cells[colName][0].ts,
-					Value:           family.cells[colName][0].value,
-				}},
-			}
-		}
-	}
-	return &btpb.ReadModifyWriteRowResponse{Row: res}, nil
+	r, _ = scrubRow(r, cols)
+	tbl.rows.ReplaceOrInsert(r)
+	resultRow, _ = scrubRow(resultRow, cols)
+	return &btpb.ReadModifyWriteRowResponse{Row: resultRow}, nil
 }
 
 func (s *server) SampleRowKeys(req *btpb.SampleRowKeysRequest, stream btpb.Bigtable_SampleRowKeysServer) error {
@@ -1098,48 +1151,38 @@ func (s *server) SampleRowKeys(req *btpb.SampleRowKeysRequest, stream btpb.Bigta
 	// final row key in the table and choose other row keys randomly.
 	var offset int64
 	var err error
-	var lastRow *row
-	tbl.rows.Ascend(func(it btree.Item) bool {
-		row := it.(*row)
+	var lastRow *btpb.Row
+	tbl.rows.Ascend(func(r *btpb.Row) bool {
 		if rand.Int31n(100) == 0 {
 			resp := &btpb.SampleRowKeysResponse{
-				RowKey:      []byte(row.key),
+				RowKey:      r.Key,
 				OffsetBytes: offset,
 			}
 			err = stream.Send(resp)
 			if err != nil {
 				return false
 			}
+			lastRow = nil
 		} else {
-			lastRow = row
+			lastRow = r
 		}
-		offset += int64(row.size())
+		offset += int64(rowsize(r))
 		return true
 	})
 	if err == nil && lastRow != nil {
 		resp := &btpb.SampleRowKeysResponse{
-			RowKey:      []byte(lastRow.key),
-			OffsetBytes: offset - int64(lastRow.size()),
+			RowKey:      lastRow.Key,
+			OffsetBytes: offset - int64(rowsize(lastRow)),
 		}
 		err = stream.Send(resp)
 	}
 	return err
 }
 
-// needGC is invoked whenever the server needs gcloop running.
-func (s *server) needGC() {
-	s.mu.Lock()
-	if s.gcc == nil {
-		s.gcc = make(chan int)
-		go s.gcloop(s.gcc)
-	}
-	s.mu.Unlock()
-}
-
-func (s *server) gcloop(done <-chan int) {
+func (s *server) gcloop() {
 	const (
-		minWait = 500  // ms
-		maxWait = 1500 // ms
+		minWait = 15000 // ms
+		maxWait = 60000 // ms
 	)
 
 	for {
@@ -1147,50 +1190,56 @@ func (s *server) gcloop(done <-chan int) {
 		d := time.Duration(minWait+rand.Intn(maxWait-minWait)) * time.Millisecond
 		select {
 		case <-time.After(d):
-		case <-done:
+		case <-s.done:
 			return // server has been closed
 		}
 
-		// Do a GC pass over all tables.
-		var tables []*table
+		// Do a GC pass over all dirty-but-inactive tables, from oldest modified to newest.
+		type todo struct {
+			lastWrite int64
+			tbl       *table
+		}
+		var todos []todo
 		s.mu.Lock()
 		for _, tbl := range s.tables {
-			tables = append(tables, tbl)
+			todos = append(todos, todo{atomic.LoadInt64(&tbl.lastWriteNanos), tbl})
 		}
 		s.mu.Unlock()
-		for _, tbl := range tables {
-			tbl.gc()
+
+		sort.Slice(todos, func(i, j int) bool {
+			return todos[i].lastWrite < todos[j].lastWrite
+		})
+
+		for _, todo := range todos {
+			todo.tbl.gc(s.clock(), s.done, false)
 		}
 	}
 }
 
 type table struct {
-	mu       sync.RWMutex
-	counter  uint64                   // increment by 1 when a new family is created
-	families map[string]*columnFamily // keyed by plain family name
-	rows     *btree.BTree             // indexed by row key
+	mu   sync.RWMutex
+	def  *btapb.Table
+	rows Rows // indexed by row key
+
+	lastReadNanos  int64 // atomic, time in nanos on the real system clock
+	lastWriteNanos int64 // atomic, time in nanos on the real system clock
 }
 
-const btreeDegree = 16
-
-func newTable(ctr *btapb.CreateTableRequest) *table {
-	fams := make(map[string]*columnFamily)
-	c := uint64(0)
-	if ctr.Table != nil {
-		for id, cf := range ctr.Table.ColumnFamilies {
-			fams[id] = &columnFamily{
-				name:   ctr.Parent + "/columnFamilies/" + id,
-				order:  c,
-				gcRule: cf.GcRule,
-			}
-			c++
-		}
+func newTable(tbl *btapb.Table, rows Rows) *table {
+	if tbl.ColumnFamilies == nil {
+		tbl.ColumnFamilies = map[string]*btapb.ColumnFamily{}
 	}
+	realNow := time.Now().UnixNano()
 	return &table{
-		families: fams,
-		counter:  c,
-		rows:     btree.New(btreeDegree),
+		def:            tbl,
+		lastReadNanos:  realNow,
+		lastWriteNanos: realNow,
+		rows:           rows,
 	}
+}
+
+func (t *table) cols() map[string]*btapb.ColumnFamily {
+	return t.def.ColumnFamilies
 }
 
 func (t *table) validTimestamp(ts int64) bool {
@@ -1202,108 +1251,148 @@ func (t *table) validTimestamp(ts int64) bool {
 	return ts%1000 == 0
 }
 
-func (t *table) columnFamilies() map[string]*columnFamily {
-	cp := make(map[string]*columnFamily)
-	t.mu.RLock()
-	for fam, cf := range t.families {
-		cp[fam] = cf
+// Must hold table lock.
+func (t *table) getOrCreateRow(key keyType) *btpb.Row {
+	r := t.rows.Get(key)
+	if r != nil {
+		return r
 	}
-	t.mu.RUnlock()
-	return cp
+	return &btpb.Row{Key: key}
 }
 
-func (t *table) mutableRow(key string) *row {
-	bkey := btreeKey(key)
-	// Try fast path first.
-	t.mu.RLock()
-	i := t.rows.Get(bkey)
-	t.mu.RUnlock()
-	if i != nil {
-		return i.(*row)
+// Must hold table lock.
+func (t *table) updateRow(r *btpb.Row) {
+	r, _ = scrubRow(r, t.cols())
+	if len(r.Families) == 0 {
+		t.rows.Delete(r.Key)
+	} else {
+		t.rows.ReplaceOrInsert(r)
+	}
+}
+
+func (t *table) gc(now time.Time, done <-chan struct{}, force bool) {
+	if !force {
+		// Recheck lastReadNanos/lastWriteNanos
+		const quiesceNanos = int64(5 * time.Minute)
+		lr := atomic.LoadInt64(&t.lastReadNanos)
+		lw := atomic.LoadInt64(&t.lastWriteNanos)
+		realNow := time.Now().UnixNano()
+		if lw == 0 || realNow-lw < quiesceNanos || realNow-lr < quiesceNanos {
+			return
+		}
 	}
 
-	// We probably need to create the row.
+	defer atomic.StoreInt64(&t.lastWriteNanos, 0) // mark GC done
+
+	// TODO(scottb): if the table is still idle after GC is done, send Rows a CloseHint()
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	i = t.rows.Get(bkey)
-	if i != nil {
-		return i.(*row)
-	}
-	r := newRow(key)
-	t.rows.ReplaceOrInsert(r)
-	return r
-}
-
-func (t *table) gc() {
-	// This method doesn't add or remove rows, so we only need a read lock for the table.
-	t.mu.RLock()
-	defer t.mu.RUnlock()
 
 	// Gather GC rules we'll apply.
 	rules := make(map[string]*btapb.GcRule) // keyed by "fam"
-	for fam, cf := range t.families {
-		if cf.gcRule != nil {
-			rules[fam] = cf.gcRule
+	for fam, cf := range t.cols() {
+		if cf.GcRule != nil {
+			rules[fam] = cf.GcRule
 		}
 	}
 	if len(rules) == 0 {
 		return
 	}
 
-	t.rows.Ascend(func(i btree.Item) bool {
-		r := i.(*row)
-		r.mu.Lock()
-		r.gc(rules)
-		r.mu.Unlock()
-		return true
+	// TODO(scottb): could collect batches of rows that need GC with only a read lock, update with write lock.
+
+	i := 0
+	t.rows.Ascend(func(r *btpb.Row) bool {
+		changed := false
+		for _, fam := range r.Families {
+			gcRule := rules[fam.Name]
+			if gcRule != nil {
+				for _, col := range fam.Columns {
+					n := len(col.Cells)
+					col.Cells = applyGC(col.Cells, gcRule, now)
+					changed = changed || n != len(col.Cells)
+				}
+			}
+		}
+		if changed {
+			r, _ := scrubRow(r, t.cols())
+			t.rows.ReplaceOrInsert(r)
+		}
+		i++
+		if i%100 != 0 {
+			return true
+		}
+
+		// Reverse lock; check if we should exit
+		t.mu.Unlock()
+		defer t.mu.Lock()
+		select {
+		case <-done:
+			return false // server has been closed
+		default:
+			return true
+		}
 	})
 }
 
-type byRowKey []*row
-
-func (b byRowKey) Len() int           { return len(b) }
-func (b byRowKey) Swap(i, j int)      { b[i], b[j] = b[j], b[i] }
-func (b byRowKey) Less(i, j int) bool { return b[i].key < b[j].key }
-
-type row struct {
-	key string
-
-	mu       sync.Mutex
-	families map[string]*family // keyed by family name
-}
-
-func newRow(key string) *row {
-	return &row{
-		key:      key,
-		families: make(map[string]*family),
+func (t *table) read() {
+	now := time.Now().UnixNano()
+	for {
+		old := atomic.LoadInt64(&t.lastReadNanos)
+		if now < old {
+			return
+		}
+		if atomic.CompareAndSwapInt64(&t.lastReadNanos, old, now) {
+			return
+		}
 	}
 }
 
+func (t *table) write() {
+	now := time.Now().UnixNano()
+	for {
+		old := atomic.LoadInt64(&t.lastWriteNanos)
+		if now < old {
+			return
+		}
+		if atomic.CompareAndSwapInt64(&t.lastWriteNanos, old, now) {
+			return
+		}
+	}
+}
+
+type byRowKey []*btpb.Row
+
+func (b byRowKey) Len() int           { return len(b) }
+func (b byRowKey) Swap(i, j int)      { b[i], b[j] = b[j], b[i] }
+func (b byRowKey) Less(i, j int) bool { return bytes.Compare(b[i].Key, b[j].Key) < 0 }
+
 // copy returns a copy of the row.
 // Cell values are aliased.
-// r.mu should be held.
-func (r *row) copy() *row {
-	nr := newRow(r.key)
-	for _, fam := range r.families {
-		nr.families[fam.name] = &family{
-			name:     fam.name,
-			order:    fam.order,
-			colNames: fam.colNames,
-			cells:    make(map[string][]cell),
+func copyRow(r *btpb.Row) *btpb.Row {
+	nr := &btpb.Row{Key: r.Key}
+	for _, fam := range r.Families {
+		f := &btpb.Family{
+			Name: fam.Name,
 		}
-		for col, cs := range fam.cells {
-			// Copy the []cell slice, but not the []byte inside each cell.
-			nr.families[fam.name].cells[col] = append([]cell(nil), cs...)
+		for _, col := range fam.Columns {
+			// Copy the cell slice, but not the []byte inside each cell.
+			f.Columns = append(f.Columns, &btpb.Column{
+				Qualifier: col.Qualifier,
+				Cells:     append([]*btpb.Cell{}, col.Cells...),
+			})
 		}
+		nr.Families = append(nr.Families, f)
 	}
 	return nr
 }
 
 // isEmpty returns true if a row doesn't contain any cell
-func (r *row) isEmpty() bool {
-	for _, fam := range r.families {
-		for _, cs := range fam.cells {
-			if len(cs) > 0 {
+func isEmpty(r *btpb.Row) bool {
+	for _, fam := range r.Families {
+		for _, cs := range fam.Columns {
+			if len(cs.Cells) > 0 {
 				return false
 			}
 		}
@@ -1311,71 +1400,41 @@ func (r *row) isEmpty() bool {
 	return true
 }
 
-// sortedFamilies returns a column family set
-// sorted in ascending creation order in a row.
-func (r *row) sortedFamilies() []*family {
-	var families []*family
-	for _, fam := range r.families {
-		families = append(families, fam)
-	}
-	sort.Sort(byCreationOrder(families))
-	return families
-}
-
-func (r *row) getOrCreateFamily(name string, order uint64) *family {
-	if _, ok := r.families[name]; !ok {
-		r.families[name] = &family{
-			name:  name,
-			order: order,
-			cells: make(map[string][]cell),
+func getFamily(r *btpb.Row, name string) *btpb.Family {
+	for _, fam := range r.Families {
+		if fam.Name == name {
+			return fam
 		}
 	}
-	return r.families[name]
+	return nil
 }
 
-// gc applies the given GC rules to the row.
-// r.mu should be held.
-func (r *row) gc(rules map[string]*btapb.GcRule) {
-	for _, fam := range r.families {
-		rule, ok := rules[fam.name]
-		if !ok {
-			continue
-		}
-		for col, cs := range fam.cells {
-			r.families[fam.name].cells[col] = applyGC(cs, rule)
-		}
+func getOrCreateFamily(r *btpb.Row, name string) *btpb.Family {
+	if fam := getFamily(r, name); fam != nil {
+		return fam
 	}
+	fam := &btpb.Family{Name: name}
+	r.Families = append(r.Families, fam)
+	return fam
 }
 
-// size returns the total size of all cell values in the row.
-func (r *row) size() int {
+// rowsize returns the total size of all cell values in the row.
+func rowsize(r *btpb.Row) int {
 	size := 0
-	for _, fam := range r.families {
-		for _, cells := range fam.cells {
-			for _, cell := range cells {
-				size += len(cell.value)
+	for _, fam := range r.Families {
+		for _, col := range fam.Columns {
+			for _, cell := range col.Cells {
+				size += len(cell.Value)
 			}
 		}
 	}
 	return size
 }
 
-// Less implements btree.Less.
-func (r *row) Less(i btree.Item) bool {
-	return r.key < i.(*row).key
-}
-
-// btreeKey returns a row for use as a key into the BTree.
-func btreeKey(s string) *row { return &row{key: s} }
-
-func (r *row) String() string {
-	return r.key
-}
-
 var gcTypeWarn sync.Once
 
 // applyGC applies the given GC rule to the cells.
-func applyGC(cells []cell, rule *btapb.GcRule) []cell {
+func applyGC(cells []*btpb.Cell, rule *btapb.GcRule, now time.Time) []*btpb.Cell {
 	switch rule := rule.Rule.(type) {
 	default:
 		// TODO(dsymonds): Support GcRule_Intersection_
@@ -1384,17 +1443,17 @@ func applyGC(cells []cell, rule *btapb.GcRule) []cell {
 		})
 	case *btapb.GcRule_Union_:
 		for _, sub := range rule.Union.Rules {
-			cells = applyGC(cells, sub)
+			cells = applyGC(cells, sub, now)
 		}
 		return cells
 	case *btapb.GcRule_MaxAge:
 		// Timestamps are in microseconds.
-		cutoff := time.Now().UnixNano() / 1e3
+		cutoff := now.UnixNano() / 1e3
 		cutoff -= rule.MaxAge.Seconds * 1e6
 		cutoff -= int64(rule.MaxAge.Nanos) / 1e3
 		// The slice of cells in in descending timestamp order.
 		// This sort.Search will return the index of the first cell whose timestamp is chronologically before the cutoff.
-		si := sort.Search(len(cells), func(i int) bool { return cells[i].ts < cutoff })
+		si := sort.Search(len(cells), func(i int) bool { return cells[i].TimestampMicros < cutoff })
 		if si < len(cells) {
 			log.Printf("bttest: GC MaxAge(%v) deleted %d cells.", rule.MaxAge, len(cells)-si)
 		}
@@ -1409,57 +1468,26 @@ func applyGC(cells []cell, rule *btapb.GcRule) []cell {
 	return cells
 }
 
-type family struct {
-	name     string            // Column family name
-	order    uint64            // Creation order of column family
-	colNames []string          // Column names are sorted in lexicographical ascending order
-	cells    map[string][]cell // Keyed by column name; cells are in descending timestamp order
-}
-
-type byCreationOrder []*family
-
-func (b byCreationOrder) Len() int           { return len(b) }
-func (b byCreationOrder) Swap(i, j int)      { b[i], b[j] = b[j], b[i] }
-func (b byCreationOrder) Less(i, j int) bool { return b[i].order < b[j].order }
-
-// cellsByColumn adds the column name to colNames set if it does not exist
-// and returns all cells within a column
-func (f *family) cellsByColumn(name string) []cell {
-	if _, ok := f.cells[name]; !ok {
-		f.colNames = append(f.colNames, name)
-		sort.Strings(f.colNames)
+func getColumn(fam *btpb.Family, name []byte) *btpb.Column {
+	for _, col := range fam.Columns {
+		if bytes.Equal(col.Qualifier, name) {
+			return col
+		}
 	}
-	return f.cells[name]
+	return nil
 }
 
-type cell struct {
-	ts     int64
-	value  []byte
-	labels []string
+func getOrCreateColumn(fam *btpb.Family, name []byte) *btpb.Column {
+	if col := getColumn(fam, name); col != nil {
+		return col
+	}
+	col := &btpb.Column{Qualifier: name}
+	fam.Columns = append(fam.Columns, col)
+	return col
 }
 
-type byDescTS []cell
+type byDescTS []*btpb.Cell
 
 func (b byDescTS) Len() int           { return len(b) }
 func (b byDescTS) Swap(i, j int)      { b[i], b[j] = b[j], b[i] }
-func (b byDescTS) Less(i, j int) bool { return b[i].ts > b[j].ts }
-
-type columnFamily struct {
-	name   string
-	order  uint64 // Creation order of column family
-	gcRule *btapb.GcRule
-}
-
-func (c *columnFamily) proto() *btapb.ColumnFamily {
-	return &btapb.ColumnFamily{
-		GcRule: c.gcRule,
-	}
-}
-
-func toColumnFamilies(families map[string]*columnFamily) map[string]*btapb.ColumnFamily {
-	fs := make(map[string]*btapb.ColumnFamily)
-	for k, v := range families {
-		fs[k] = v.proto()
-	}
-	return fs
-}
+func (b byDescTS) Less(i, j int) bool { return b[i].TimestampMicros > b[j].TimestampMicros }

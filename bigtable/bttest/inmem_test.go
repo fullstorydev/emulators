@@ -1556,13 +1556,16 @@ func Test_Mutation_DeleteFromColumn(t *testing.T) {
 }
 
 func TestFilterRow(t *testing.T) {
-	row := &row{
-		key: "row",
-		families: map[string]*family{
-			"fam": {
-				name: "fam",
-				cells: map[string][]cell{
-					"col": {{ts: 1000, value: []byte("val")}},
+	row := &btpb.Row{
+		Key: []byte("row"),
+		Families: []*btpb.Family{
+			{
+				Name: "fam",
+				Columns: []*btpb.Column{
+					{
+						Qualifier: []byte("col"),
+						Cells:     []*btpb.Cell{{TimestampMicros: 1000, Value: []byte("val")}},
+					},
 				},
 			},
 		},
@@ -1597,7 +1600,7 @@ func TestFilterRow(t *testing.T) {
 		{&btpb.RowFilter{Filter: &btpb.RowFilter_TimestampRangeFilter{&btpb.TimestampRange{StartTimestampMicros: int64(0), EndTimestampMicros: int64(1000)}}}, false},
 		{&btpb.RowFilter{Filter: &btpb.RowFilter_TimestampRangeFilter{&btpb.TimestampRange{StartTimestampMicros: int64(1000), EndTimestampMicros: int64(2000)}}}, true},
 	} {
-		got, err := filterRow(test.filter, row.copy())
+		got, err := filterRow(test.filter, copyRow(row))
 		if err != nil {
 			t.Errorf("%s: got unexpected error: %v", proto.CompactTextString(test.filter), err)
 		}
@@ -1608,13 +1611,16 @@ func TestFilterRow(t *testing.T) {
 }
 
 func TestFilterRowWithErrors(t *testing.T) {
-	row := &row{
-		key: "row",
-		families: map[string]*family{
-			"fam": {
-				name: "fam",
-				cells: map[string][]cell{
-					"col": {{ts: 1000, value: []byte("val")}},
+	row := &btpb.Row{
+		Key: []byte("row"),
+		Families: []*btpb.Family{
+			{
+				Name: "fam",
+				Columns: []*btpb.Column{
+					{
+						Qualifier: []byte("col"),
+						Cells:     []*btpb.Cell{{TimestampMicros: 1000, Value: []byte("val")}},
+					},
 				},
 			},
 		},
@@ -1627,10 +1633,8 @@ func TestFilterRowWithErrors(t *testing.T) {
 		{&btpb.RowFilter{Filter: &btpb.RowFilter_ColumnQualifierRegexFilter{[]byte("[")}}},
 		{&btpb.RowFilter{Filter: &btpb.RowFilter_ValueRegexFilter{[]byte("[")}}},
 		{&btpb.RowFilter{Filter: &btpb.RowFilter_Chain_{
-			Chain: &btpb.RowFilter_Chain{
-				Filters: []*btpb.RowFilter{
-					{Filter: &btpb.RowFilter_ValueRegexFilter{[]byte("[")}},
-				},
+			Chain: &btpb.RowFilter_Chain{Filters: []*btpb.RowFilter{
+				{Filter: &btpb.RowFilter_ValueRegexFilter{[]byte("[")}}},
 			},
 		}}},
 		{&btpb.RowFilter{Filter: &btpb.RowFilter_Condition_{
@@ -1644,7 +1648,7 @@ func TestFilterRowWithErrors(t *testing.T) {
 		{&btpb.RowFilter{Filter: &btpb.RowFilter_TimestampRangeFilter{&btpb.TimestampRange{StartTimestampMicros: int64(1), EndTimestampMicros: int64(1000)}}}}, // Server only supports millisecond precision.
 		{&btpb.RowFilter{Filter: &btpb.RowFilter_TimestampRangeFilter{&btpb.TimestampRange{StartTimestampMicros: int64(1000), EndTimestampMicros: int64(1)}}}}, // Server only supports millisecond precision.
 	} {
-		got, err := filterRow(test.badRegex, row.copy())
+		got, err := filterRow(test.badRegex, copyRow(row))
 		if got != false {
 			t.Errorf("%s: got true, want false", proto.CompactTextString(test.badRegex))
 		}
@@ -1666,7 +1670,7 @@ func TestFilterRowWithRowSampleFilter(t *testing.T) {
 		{0.5, false}, // Equal to random float. Return no rows.
 		{0.9, true},  // Greater than random float. Return all rows.
 	} {
-		got, err := filterRow(&btpb.RowFilter{Filter: &btpb.RowFilter_RowSampleFilter{test.p}}, &row{})
+		got, err := filterRow(&btpb.RowFilter{Filter: &btpb.RowFilter_RowSampleFilter{test.p}}, &btpb.Row{})
 		if err != nil {
 			t.Fatalf("%f: %v", test.p, err)
 		}
@@ -1678,13 +1682,16 @@ func TestFilterRowWithRowSampleFilter(t *testing.T) {
 
 func TestFilterRowWithBinaryColumnQualifier(t *testing.T) {
 	rs := []byte{128, 128}
-	row := &row{
-		key: string(rs),
-		families: map[string]*family{
-			"fam": {
-				name: "fam",
-				cells: map[string][]cell{
-					string(rs): {{ts: 1000, value: []byte("val")}},
+	row := &btpb.Row{
+		Key: rs,
+		Families: []*btpb.Family{
+			{
+				Name: "fam",
+				Columns: []*btpb.Column{
+					{
+						Qualifier: rs,
+						Cells:     []*btpb.Cell{{TimestampMicros: 1000, Value: []byte("val")}},
+					},
 				},
 			},
 		},
@@ -1700,7 +1707,7 @@ func TestFilterRowWithBinaryColumnQualifier(t *testing.T) {
 		{`[\x7f\x80]{2}`, true}, // succeeds: exactly two of either 127 or 128
 		{`\C{2}`, true},         // succeeds: two bytes
 	} {
-		got, _ := filterRow(&btpb.RowFilter{Filter: &btpb.RowFilter_ColumnQualifierRegexFilter{[]byte(test.filter)}}, row.copy())
+		got, _ := filterRow(&btpb.RowFilter{Filter: &btpb.RowFilter_ColumnQualifierRegexFilter{[]byte(test.filter)}}, copyRow(row))
 		if got != test.want {
 			t.Errorf("%v: got %t, want %t", test.filter, got, test.want)
 		}
@@ -1709,13 +1716,16 @@ func TestFilterRowWithBinaryColumnQualifier(t *testing.T) {
 
 func TestFilterRowWithUnicodeColumnQualifier(t *testing.T) {
 	rs := []byte("a§b")
-	row := &row{
-		key: string(rs),
-		families: map[string]*family{
-			"fam": {
-				name: "fam",
-				cells: map[string][]cell{
-					string(rs): {{ts: 1000, value: []byte("val")}},
+	row := &btpb.Row{
+		Key: rs,
+		Families: []*btpb.Family{
+			{
+				Name: "fam",
+				Columns: []*btpb.Column{
+					{
+						Qualifier: rs,
+						Cells:     []*btpb.Cell{{TimestampMicros: 1000, Value: []byte("val")}},
+					},
 				},
 			},
 		},
@@ -1739,7 +1749,7 @@ func TestFilterRowWithUnicodeColumnQualifier(t *testing.T) {
 		{`a\C{2}b`, true},    // succeeds: § is two bytes
 		{`\C{4}`, true},      // succeeds: four bytes
 	} {
-		got, _ := filterRow(&btpb.RowFilter{Filter: &btpb.RowFilter_ColumnQualifierRegexFilter{[]byte(test.filter)}}, row.copy())
+		got, _ := filterRow(&btpb.RowFilter{Filter: &btpb.RowFilter_ColumnQualifierRegexFilter{[]byte(test.filter)}}, copyRow(row))
 		if got != test.want {
 			t.Errorf("%v: got %t, want %t", test.filter, got, test.want)
 		}
