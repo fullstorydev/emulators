@@ -363,6 +363,107 @@ func (s *server) CheckConsistency(ctx context.Context, req *btapb.CheckConsisten
 	}, nil
 }
 
+type simpleRange struct {
+	start, end keyType
+}
+
+// Returns a sorted, normalized list of ranges to traverse.
+func mergeRowRanges(explicit []keyType, rrs []*btpb.RowRange) []simpleRange {
+	var srs []simpleRange
+	for _, k := range explicit {
+		srs = append(srs, simpleRange{
+			start: k,
+			end:   append(k, 0),
+		})
+	}
+	for _, rr := range rrs {
+		var sr simpleRange
+		switch sk := rr.StartKey.(type) {
+		case *btpb.RowRange_StartKeyClosed:
+			sr.start = sk.StartKeyClosed
+		case *btpb.RowRange_StartKeyOpen:
+			sr.start = append(sk.StartKeyOpen, 0)
+		}
+		switch ek := rr.EndKey.(type) {
+		case *btpb.RowRange_EndKeyClosed:
+			sr.end = append(ek.EndKeyClosed, 0)
+		case *btpb.RowRange_EndKeyOpen:
+			sr.end = ek.EndKeyOpen
+		}
+		srs = append(srs, sr)
+	}
+	return mergeSimpleRanges(srs)
+}
+
+func mergeSimpleRanges(srs []simpleRange) []simpleRange {
+	if len(srs) == 0 {
+		return srs
+	}
+
+	// Special case end compare: the empty key is greater than a non-empty key
+	endCmp := func(a, b simpleRange) int {
+		switch {
+		case len(a.end) == 0 && len(b.end) == 0:
+			return 0 // both empty
+		case len(b.end) == 0:
+			return -1 // b is infinite, therefore a < b
+		case len(a.end) == 0:
+			return 1 // a is infinite, therefore a > b
+		default:
+			return bytes.Compare(a.end, b.end)
+		}
+	}
+
+	sort.Slice(srs, func(i, j int) bool {
+		if cmp := bytes.Compare(srs[i].start, srs[j].start); cmp < 0 {
+			return true
+		} else if cmp > 0 {
+			return false
+		}
+		if cmp := endCmp(srs[i], srs[j]); cmp < 0 {
+			return true
+		} else if cmp > 0 {
+			return false
+		}
+		return false
+	})
+
+	merge := func(a simpleRange, b simpleRange) (simpleRange, bool) {
+		// a and b are disjoint if a's range is not infinite, and a's end less than b's start.
+		if len(a.end) > 0 && bytes.Compare(a.end, b.start) < 0 {
+			return simpleRange{}, false
+		}
+
+		// a and b are not disjoint, so we can merge them
+		var end keyType
+		if endCmp(a, b) < 0 {
+			end = b.end
+		} else {
+			end = a.end
+		}
+		return simpleRange{
+			start: a.start,
+			end:   end,
+		}, true
+	}
+
+	// Merge.
+	last := 0
+	for i := range srs {
+		if i == 0 {
+			continue
+		}
+		merged, didMerge := merge(srs[last], srs[i])
+		if didMerge {
+			srs[last] = merged
+		} else {
+			last++
+			srs[last] = srs[i]
+		}
+	}
+	return srs[:last+1]
+}
+
 func (s *server) ReadRows(req *btpb.ReadRowsRequest, stream btpb.Bigtable_ReadRowsServer) error {
 	s.mu.Lock()
 	tbl, ok := s.tables[req.TableName]
@@ -375,125 +476,129 @@ func (s *server) ReadRows(req *btpb.ReadRowsRequest, stream btpb.Bigtable_ReadRo
 		return err
 	}
 
-	// Rows to read can be specified by a set of row keys and/or a set of row ranges.
-	// Output is a stream of sorted, de-duped rows.
-	rowSet := func() map[string]*btpb.Row {
-		defer tbl.read()
-		tbl.mu.RLock()
-		defer tbl.mu.RUnlock()
-
-		rowSet := make(map[string]*btpb.Row)
-		addRow := func(r *btpb.Row) bool {
-			rowSet[string(r.Key)] = r
-			return true
-		}
-
-		if req.Rows != nil &&
-			len(req.Rows.RowKeys)+len(req.Rows.RowRanges) > 0 {
-			// Add the explicitly given keys
-			for _, key := range req.Rows.RowKeys {
-				if i := tbl.rows.Get(key); i != nil {
-					addRow(i)
-				}
-			}
-
-			// Add keys from row ranges
-			for _, rr := range req.Rows.RowRanges {
-				var start, end keyType
-				switch sk := rr.StartKey.(type) {
-				case *btpb.RowRange_StartKeyClosed:
-					start = sk.StartKeyClosed
-				case *btpb.RowRange_StartKeyOpen:
-					start = append(sk.StartKeyOpen, 0)
-				}
-				switch ek := rr.EndKey.(type) {
-				case *btpb.RowRange_EndKeyClosed:
-					end = append(ek.EndKeyClosed, 0)
-				case *btpb.RowRange_EndKeyOpen:
-					end = ek.EndKeyOpen
-				}
-				switch {
-				case len(start) == 0 && len(end) == 0:
-					tbl.rows.Ascend(addRow) // all rows
-				case len(start) == 0:
-					tbl.rows.AscendLessThan(end, addRow)
-				case len(end) == 0:
-					tbl.rows.AscendGreaterOrEqual(start, addRow)
-				default:
-					tbl.rows.AscendRange(start, end, addRow)
-				}
-			}
-		} else {
-			// Read all rows
-			tbl.rows.Ascend(addRow)
-		}
-		return rowSet
-	}()
-
-	rows := make([]*btpb.Row, 0, len(rowSet))
-	for _, r := range rowSet {
-		fams := len(r.Families)
-		if fams != 0 {
-			rows = append(rows, r)
-		}
+	srs := []simpleRange{{}} // infinite range unless specified
+	if len(req.GetRows().GetRowKeys())+len(req.GetRows().GetRowRanges()) > 0 {
+		srs = mergeRowRanges(req.GetRows().GetRowKeys(), req.GetRows().GetRowRanges())
 	}
-	sort.Sort(byRowKey(rows))
+
+	defer tbl.read()
+	tbl.mu.RLock()
+	defer tbl.mu.RUnlock()
 
 	limit := int(req.RowsLimit)
 	count := 0
-	for _, r := range rows {
-		if limit > 0 && count >= limit {
-			return nil
+
+	var err error
+	var cb chunkBuilder
+	sendResponse := func() error {
+		// Reverse the lock while streaming the row out.
+		tbl.mu.RUnlock()
+		defer tbl.mu.RLock()
+		return stream.Send(&btpb.ReadRowsResponse{Chunks: cb.chunks})
+	}
+
+	for _, sr := range srs {
+		addRow := func(r *btpb.Row) bool {
+			if limit > 0 && count >= limit {
+				return false
+			}
+
+			if len(r.Families) == 0 {
+				return true
+			}
+
+			var match bool
+			match, err = filterRow(req.Filter, r)
+			if err != nil {
+				return false
+			} else if !match {
+				return true
+			}
+
+			if added := cb.add(tbl.cols(), r); added {
+				count++
+			}
+
+			if len(cb.chunks) > 1024 {
+				err = sendResponse()
+				if err != nil {
+					return false
+				}
+				cb.reset()
+			}
+			return true
 		}
-		streamed, err := streamRow(stream, tbl.cols(), r, req.Filter)
+
+		switch {
+		case len(sr.start) == 0 && len(sr.end) == 0:
+			tbl.rows.Ascend(addRow) // all rows
+		case len(sr.start) == 0:
+			tbl.rows.AscendLessThan(sr.end, addRow)
+		case len(sr.end) == 0:
+			tbl.rows.AscendGreaterOrEqual(sr.start, addRow)
+		default:
+			tbl.rows.AscendRange(sr.start, sr.end, addRow)
+		}
+
 		if err != nil {
 			return err
 		}
-		if streamed {
-			count++
-		}
 	}
-	return nil
+	if err == nil && len(cb.chunks) > 0 {
+		err = sendResponse()
+	}
+	return err
 }
 
-// streamRow filters the given row and sends it via the given stream.
-// Returns true if at least one cell matched the filter and was streamed, false otherwise.
-func streamRow(stream btpb.Bigtable_ReadRowsServer, cols map[string]*btapb.ColumnFamily, r *btpb.Row, f *btpb.RowFilter) (bool, error) {
-	match, err := filterRow(f, r)
-	if err != nil {
-		return false, err
-	}
-	if !match {
-		return false, nil
-	}
+type chunkBuilder struct {
+	chunks []*btpb.ReadRowsResponse_CellChunk
+}
 
-	rrr := &btpb.ReadRowsResponse{}
+func (cb *chunkBuilder) reset() {
+	cb.chunks = nil
+}
+
+func (cb *chunkBuilder) add(cols map[string]*btapb.ColumnFamily, r *btpb.Row) bool {
 	scrubRow(r, cols)
+	newRow := true
 	for _, fam := range r.Families {
+		newFam := true
 		for _, col := range fam.Columns {
+			newCol := true
 			cells := col.Cells
 			if len(cells) == 0 {
 				continue
 			}
 			for _, cell := range cells {
-				rrr.Chunks = append(rrr.Chunks, &btpb.ReadRowsResponse_CellChunk{
-					RowKey:          r.Key,
-					FamilyName:      &wrappers.StringValue{Value: fam.Name},
-					Qualifier:       &wrappers.BytesValue{Value: col.Qualifier},
+				chunk := &btpb.ReadRowsResponse_CellChunk{
 					TimestampMicros: cell.TimestampMicros,
 					Value:           cell.Value,
 					Labels:          cell.Labels,
-				})
+				}
+				if newRow {
+					chunk.RowKey = r.Key
+					newRow = false
+				}
+				if newFam {
+					chunk.FamilyName = &wrappers.StringValue{Value: fam.Name}
+					newFam = false
+				}
+				if newCol {
+					chunk.Qualifier = &wrappers.BytesValue{Value: col.Qualifier}
+					newCol = false
+				}
+
+				// TODO(scottb): if Value is massive, we might have to break it up into multiple responses.
+				cb.chunks = append(cb.chunks, chunk)
 			}
 		}
 	}
 	// We can't have a cell with just COMMIT set, which would imply a new empty cell.
 	// So modify the last cell to have the COMMIT flag set.
-	if len(rrr.Chunks) > 0 {
-		rrr.Chunks[len(rrr.Chunks)-1].RowStatus = &btpb.ReadRowsResponse_CellChunk_CommitRow{CommitRow: true}
+	if len(cb.chunks) > 0 {
+		cb.chunks[len(cb.chunks)-1].RowStatus = &btpb.ReadRowsResponse_CellChunk_CommitRow{CommitRow: true}
 	}
-
-	return true, stream.Send(rrr)
+	return true
 }
 
 // filterRow modifies a row with the given filter. Returns true if at least one cell from the row matches,
@@ -1361,12 +1466,6 @@ func (t *table) write() {
 		}
 	}
 }
-
-type byRowKey []*btpb.Row
-
-func (b byRowKey) Len() int           { return len(b) }
-func (b byRowKey) Swap(i, j int)      { b[i], b[j] = b[j], b[i] }
-func (b byRowKey) Less(i, j int) bool { return bytes.Compare(b[i].Key, b[j].Key) < 0 }
 
 // copy returns a copy of the row.
 // Cell values are aliased.
