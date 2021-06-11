@@ -49,7 +49,6 @@ import (
 	"github.com/google/btree"
 	btapb "google.golang.org/genproto/googleapis/bigtable/admin/v2"
 	btpb "google.golang.org/genproto/googleapis/bigtable/v2"
-	"google.golang.org/genproto/googleapis/longrunning"
 	statpb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -151,10 +150,6 @@ func (s *server) CreateTable(ctx context.Context, req *btapb.CreateTableRequest)
 		ct.Granularity = btapb.Table_MILLIS
 	}
 	return ct, nil
-}
-
-func (s *server) CreateTableFromSnapshot(context.Context, *btapb.CreateTableFromSnapshotRequest) (*longrunning.Operation, error) {
-	return nil, status.Errorf(codes.Unimplemented, "the emulator does not currently support snapshots")
 }
 
 func (s *server) ListTables(ctx context.Context, req *btapb.ListTablesRequest) (*btapb.ListTablesResponse, error) {
@@ -324,22 +319,6 @@ func (s *server) CheckConsistency(ctx context.Context, req *btapb.CheckConsisten
 	return &btapb.CheckConsistencyResponse{
 		Consistent: true,
 	}, nil
-}
-
-func (s *server) SnapshotTable(context.Context, *btapb.SnapshotTableRequest) (*longrunning.Operation, error) {
-	return nil, status.Errorf(codes.Unimplemented, "the emulator does not currently support snapshots")
-}
-
-func (s *server) GetSnapshot(context.Context, *btapb.GetSnapshotRequest) (*btapb.Snapshot, error) {
-	return nil, status.Errorf(codes.Unimplemented, "the emulator does not currently support snapshots")
-}
-
-func (s *server) ListSnapshots(context.Context, *btapb.ListSnapshotsRequest) (*btapb.ListSnapshotsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "the emulator does not currently support snapshots")
-}
-
-func (s *server) DeleteSnapshot(context.Context, *btapb.DeleteSnapshotRequest) (*emptypb.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "the emulator does not currently support snapshots")
 }
 
 func (s *server) ReadRows(req *btpb.ReadRowsRequest, stream btpb.Bigtable_ReadRowsServer) error {
