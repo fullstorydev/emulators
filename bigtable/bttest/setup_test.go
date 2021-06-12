@@ -19,7 +19,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type clientIntfFunc func(t *testing.T) (context.Context, *clientIntf, bool)
+type clientIntfFunc func(t *testing.T, name string) (context.Context, *clientIntf, bool)
 
 var (
 	clientIntfFuncs = map[string]clientIntfFunc{}
@@ -31,7 +31,7 @@ func newClient(t *testing.T) (context.Context, *clientIntf, bool) {
 
 	parts := strings.SplitN(t.Name(), "/", 2)
 	if len(parts) == 2 {
-		return clientIntfFuncs[parts[0]](t)
+		return clientIntfFuncs[parts[0]](t, parts[1])
 	}
 
 	svr := &server{

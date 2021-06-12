@@ -105,7 +105,7 @@ func NewServer(laddr string, opt ...grpc.ServerOption) (*Server, error) {
 }
 
 type Options struct {
-	// A storage layer to use; if nil, defaults to BtreeStorage.
+	// A storage layer to use; if nil, defaults to LeveldbMemStorage.
 	Storage Storage
 	// The clock to use use; if nil, defaults to time.Now().
 	Clock func() time.Time
@@ -119,7 +119,7 @@ type Options struct {
 // on the provided address. The resolved address is named by the Addr field.
 func NewServerWithOptions(laddr string, opt Options) (*Server, error) {
 	if opt.Storage == nil {
-		opt.Storage = BtreeStorage{}
+		opt.Storage = LeveldbMemStorage{}
 	}
 	if opt.Clock == nil {
 		opt.Clock = time.Now

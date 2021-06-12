@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/fullstorydev/emulators/bigtable/bttest"
 	"google.golang.org/grpc"
@@ -29,6 +30,7 @@ import (
 var (
 	host = flag.String("host", "localhost", "the address to bind to on the local machine")
 	port = flag.Int("port", 9000, "the port number to bind to on the local machine")
+	dir  = flag.String("dir", "", "if set, use persistence in the given directory")
 )
 
 const (
@@ -38,11 +40,27 @@ const (
 func main() {
 	grpc.EnableTracing = false
 	flag.Parse()
-	opts := []grpc.ServerOption{
-		grpc.MaxRecvMsgSize(maxMsgSize),
-		grpc.MaxSendMsgSize(maxMsgSize),
+
+	opts := bttest.Options{
+		Storage: nil,
+		GrpcOpts: []grpc.ServerOption{
+			grpc.MaxRecvMsgSize(maxMsgSize),
+			grpc.MaxSendMsgSize(maxMsgSize),
+		},
 	}
-	srv, err := bttest.NewServer(fmt.Sprintf("%s:%d", *host, *port), opts...)
+
+	if *dir != "" {
+		_ = os.Mkdir(*dir, 0777)
+		fmt.Printf("Writing to: %s\n", *dir)
+		opts.Storage = bttest.LeveldbDiskStorage{
+			Root: *dir,
+			ErrLog: func(err error, msg string) {
+				fmt.Printf("%s: %v\n", msg, err)
+			},
+		}
+	}
+
+	srv, err := bttest.NewServerWithOptions(fmt.Sprintf("%s:%d", *host, *port), opts)
 	if err != nil {
 		log.Fatalf("failed to start emulator: %v", err)
 	}

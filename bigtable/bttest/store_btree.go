@@ -11,7 +11,10 @@ import (
 
 const btreeDegree = 16
 
-// Stores data in an in-memory btree. This is the default.
+// BtreeStorage stores data in an in-memory btree. This implementation is here for historical reference
+// and should not generally be used; prefer LeveldbMemStorage. BtreeStorage's row scans do not work well
+// in the face of concurrent insertions and deletions. Although no data races occur, changes to the Btree's
+// internal structure break iteration in surprising ways, resulting in unpredictable rowscan results.
 type BtreeStorage struct {
 }
 

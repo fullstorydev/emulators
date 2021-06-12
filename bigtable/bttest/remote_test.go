@@ -23,7 +23,7 @@ import (
 // e.g. PROJECT_ID=fs-playpen INSTANCE_ID=playpen-test1 go test -v fs/gcloud/bt/bttest -run TestRemote
 
 var (
-	testMeta = []struct {
+	remoteTestMeta = []struct {
 		name string
 		f    func(*testing.T)
 	}{
@@ -67,10 +67,10 @@ func TestRemote(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	clientIntfFuncs[t.Name()] = func(t *testing.T) (context.Context, *clientIntf, bool) {
-		return newRemoteServer(t, btcPool, btcaPool, project, instance)
+	clientIntfFuncs[t.Name()] = func(t *testing.T, name string) (context.Context, *clientIntf, bool) {
+		return newRemoteServer(t, name, btcPool, btcaPool, project, instance)
 	}
-	for _, tc := range testMeta {
+	for _, tc := range remoteTestMeta {
 		t.Run(tc.name, tc.f)
 	}
 }
@@ -104,13 +104,13 @@ func newAdminPool(ctx context.Context) (grpc.ClientConnInterface, error) {
 	return gtransport.DialPool(ctx, o...)
 }
 
-func newRemoteServer(t *testing.T, btcPool, btcaPool grpc.ClientConnInterface, project, instance string) (context.Context, *clientIntf, bool) {
+func newRemoteServer(t *testing.T, name string, btcPool, btcaPool grpc.ClientConnInterface, project, instance string) (context.Context, *clientIntf, bool) {
 	nameParts := strings.Split(t.Name(), "/")
 	parent := fmt.Sprintf("projects/%s/instances/%s", project, instance)
 	tbl := fmt.Sprintf("projects/%s/instances/%s/tables/%s", project, instance, nameParts[len(nameParts)-1])
 	ret := &clientIntf{
 		parent:                   parent,
-		name:                     nameParts[1],
+		name:                     name,
 		tblName:                  tbl,
 		BigtableClient:           btpb.NewBigtableClient(btcPool),
 		BigtableTableAdminClient: btapb.NewBigtableTableAdminClient(btcaPool),
