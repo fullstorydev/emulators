@@ -1,5 +1,5 @@
 # emulators
-High quality cloud service emulators for local development stacks
+High quality Google Cloud service emulators for local development stacks
 
 ## Why?
 
