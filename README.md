@@ -3,11 +3,19 @@ High quality Google Cloud service emulators for local development stacks
 
 ## Why?
 
-At FullStory, our entire product and backend software stack runs in each engineer's local workstation.  This high-quality local development experience keeps our engineers happy and productive, because they are able to build and test features or reproduce and fix bugs quickly and easily.  Additionally, run transiently as part of unit tests.  Our unit testing story is simpler when our live code can rely on expected services to exist, and we don't have to write as many mocks.
+At FullStory, our entire product and backend software stack runs in each engineer's local workstation. This high-quality local development experience keeps our engineers happy and productive, because they are able to:
 
-- All of our own backend services are designed to operate correctly in a local environment.
-- Open source, third party services such as Redis, Zookeeper, or Solr can be easily configured to run locally.
-- Google Cloud infrastructure must be emulated.
+- build and test features locally
+- reproduce and fix bugs quickly and easily
+- run high-quality services in unit and integration tests
+
+Our local development and testing story is simpler when our live code can rely on expected services to exist, and we don't have to write as many mocks.
+
+Some of the ways we achieve this:
+
+- Our own backend services operate in a reasonable manner in a local environment.
+- Open source, third party services (such as Redis, Zookeeper, or Solr) run locally.
+- We emulate Google Cloud infrastructure.
 
 ## What Google Cloud services do we emulate?
 
