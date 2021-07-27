@@ -22,7 +22,7 @@ Some of the ways we achieve this:
 | Service                    | Persistence? | Status                  | Notes                                                                                                                         |
 |----------------------------|--------------|-------------------------|-------------------------------------------------------------------------------------------------------------------------------|
 | Google Bigtable            | Yes          | Shipped, see below      | Fork of [bigtable/bttest](https://github.com/googleapis/google-cloud-go/tree/master/bigtable/bttest)                          |
-| Google Cloud Storage (GCS) | Yes          | Coming soon             | Written from scratch                                                                                                          |
+| Google Cloud Storage (GCS) | Yes          | Shipped, see below      | Written from scratch                                                                                                          |
 | Google Pubsub              | No           | Considering persistence | Vanilla [pubsub/pstest](https://github.com/googleapis/google-cloud-go/tree/master/pubsub/pstest)                              |
 | Google Cloud Functions     | n/a          | In consideration        | Thin wrapper that manages `node` processes.                                                                                   |
 | Google Datastore           | Yes          | -                       | Google's [Datastore emulator](https://cloud.google.com/datastore/docs/tools/datastore-emulator) (written in Java) works great |
@@ -91,4 +91,31 @@ For on-disk pesistence:
 
 ## Google Cloud Storage Emulator
 
-Coming soon.
+### Running, out of process
+
+Example, running on a specific port, with persistence:
+```sh
+> gcsemulator -port 8888 -dir var/storage
+Writing to: var/storage
+Cloud Storage emulator running on http://127.0.0.1:8888
+```
+
+Usage:
+```
+  -dir string
+    	if set, use persistence in the given directory
+  -host string
+    	the address to bind to on the local machine (default "localhost")
+  -port int
+    	the port number to bind to on the local machine (default 9000)
+```
+
+For unit tests:
+```go
+	// TODO
+```
+
+For on-disk pesistence:
+```go
+	// TODO
+```
