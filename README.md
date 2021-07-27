@@ -75,7 +75,7 @@ For unit tests:
 	os.Setenv("BIGTABLE_EMULATOR_HOST", svr.Addr)
 ```
 
-For on-disk pesistence:
+For on-disk persistence:
 ```go
 	// start an leveldb-backed BigTable test server
 	srv, err := bttest.NewServerWithOptions(fmt.Sprintf("127.0.0.1:%d", *btport), bttest.Options{
@@ -127,7 +127,13 @@ For unit tests:
 	// TODO
 ```
 
-For on-disk pesistence:
+For on-disk persistence:
+```go
+	// TODO
+```
+
+### Connecting to the emulator from Go
+
 ```go
 	// TODO
 ```
