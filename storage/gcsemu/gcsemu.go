@@ -120,9 +120,9 @@ func (g *GcsEmu) Handler(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			alt := r.URL.Query().Get("alt")
-			if alt == "media" || alt == "" {
+			if alt == "media" || (p.IsPublic && alt == "") {
 				g.handleGcsMediaRequest(w, r.Header.Get("Accept-Encoding"), bucket, object)
-			} else if alt == "json" {
+			} else if alt == "json" || (!p.IsPublic && alt == "") {
 				g.handleGcsMetadataRequest(w, bucket, object)
 			} else {
 				// should never happen?

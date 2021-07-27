@@ -1,8 +1,10 @@
 package gcsemu
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -14,6 +16,7 @@ import (
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
+	api "google.golang.org/api/storage/v1"
 	"gotest.tools/v3/assert"
 )
 
@@ -375,7 +378,7 @@ func testGenNotMatchDoesntExist(t *testing.T, bh BucketHandle) {
 	assert.Equal(t, http.StatusPreconditionFailed, httpStatusCodeOf(err), "wrong error %T: %s", err, err)
 }
 
-func testRawHttp(t *testing.T, bh BucketHandle, httpAddr string) {
+func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url string) {
 	const name = "gscemu-test3.txt"
 	ctx := context.Background()
 	oh := bh.Object(name)
@@ -385,25 +388,50 @@ func testRawHttp(t *testing.T, bh BucketHandle, httpAddr string) {
 	assert.NilError(t, write(w, v1), "failed")
 
 	// Try a raw http get.
-	u := fmt.Sprintf("http://%s/storage/v1/b/%s/o/%s", httpAddr, bh.Name, name)
-	t.Logf(u)
-	rsp, err := http.Get(u)
-	assert.NilError(t, err, "failed")
-	assert.Equal(t, http.StatusOK, rsp.StatusCode, "wrong")
+	{
+		u := fmt.Sprintf("%s/download/storage/v1/b/%s/o/%s?alt=media", url, bh.Name, name)
+		t.Logf(u)
+		rsp, err := httpClient.Get(u)
+		assert.NilError(t, err, "failed")
 
-	body, err := ioutil.ReadAll(rsp.Body)
-	assert.NilError(t, err, "failed")
-	assert.Equal(t, v1, string(body), "wrong")
+		body, err := ioutil.ReadAll(rsp.Body)
+		assert.NilError(t, err, "failed")
+		assert.Equal(t, http.StatusOK, rsp.StatusCode, "wrong")
+		assert.Equal(t, v1, string(body), "wrong")
+	}
 
-	// Use a different syntax.
-	u = fmt.Sprintf("http://%s/%s/%s?alt=media", httpAddr, bh.Name, name)
-	t.Logf(u)
-	rsp, err = http.Get(u)
-	assert.NilError(t, err, "failed")
-	assert.Equal(t, 200, rsp.StatusCode, "failed")
-	body, err = ioutil.ReadAll(rsp.Body)
-	assert.NilError(t, err, "failed")
-	assert.Equal(t, v1, string(body), "wrong")
+	// Try a raw http metadata get.
+	{
+		u := fmt.Sprintf("%s/storage/v1/b/%s/o/%s", url, bh.Name, name)
+		t.Logf(u)
+		rsp, err := httpClient.Get(u)
+		assert.NilError(t, err, "failed")
+
+		body, err := ioutil.ReadAll(rsp.Body)
+		assert.NilError(t, err, "failed")
+		assert.Equal(t, http.StatusOK, rsp.StatusCode, "wrong")
+
+		var attrs api.Object
+		err = json.NewDecoder(bytes.NewReader(body)).Decode(&attrs)
+		assert.NilError(t, err, "failed")
+		assert.Equal(t, name, attrs.Name, "wrong")
+		assert.Equal(t, bh.Name, attrs.Bucket, "wrong")
+		assert.Equal(t, uint64(len(v1)), attrs.Size, "wrong")
+		assert.Equal(t, int64(1), attrs.Metageneration, "wrong")
+	}
+
+	// Public URL.
+	{
+		u := fmt.Sprintf("%s/%s/%s?alt=media", url, bh.Name, name)
+		t.Logf(u)
+		rsp, err := httpClient.Get(u)
+		assert.NilError(t, err, "failed")
+
+		body, err := ioutil.ReadAll(rsp.Body)
+		assert.NilError(t, err, "failed")
+		assert.Equal(t, http.StatusOK, rsp.StatusCode, "failed")
+		assert.Equal(t, v1, string(body), "wrong")
+	}
 }
 
 func testCopyBasics(t *testing.T, bh BucketHandle) {
@@ -544,7 +572,7 @@ func testCompose(t *testing.T, bh BucketHandle) {
 		srcs[1].If(storage.Conditions{GenerationMatch: srcGens[1] + 1})) // incorrect
 	composer.ContentType = "text/plain"
 	_, err = composer.Run(ctx)
-	assert.ErrorContains(t, err, "precondition failed")
+	assert.ErrorContains(t, err, "googleapi: Error 412")
 	assert.Equal(t, http.StatusPreconditionFailed, httpStatusCodeOf(err), "expected precondition failed")
 
 	// Issue the same request with incorrect generation on the destination.
@@ -553,7 +581,7 @@ func testCompose(t *testing.T, bh BucketHandle) {
 		srcs[1].If(storage.Conditions{GenerationMatch: srcGens[1]}))
 	composer.ContentType = "text/plain"
 	_, err = composer.Run(ctx)
-	assert.ErrorContains(t, err, "precondition failed")
+	assert.ErrorContains(t, err, "googleapi: Error 412")
 	assert.Equal(t, http.StatusPreconditionFailed, httpStatusCodeOf(err), "expected precondition failed")
 
 	// Issue the a request does not exist destination.

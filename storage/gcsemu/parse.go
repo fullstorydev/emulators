@@ -24,8 +24,9 @@ var (
 )
 
 type GcsParams struct {
-	Bucket string
-	Object string
+	Bucket   string
+	Object   string
+	IsPublic bool
 }
 
 // Parses a GCS url.
@@ -39,7 +40,11 @@ func ParseGcsUrl(u *url.URL) (*GcsParams, bool) {
 	if g, ok := parseGcsUrl(gcsObjectPathRegex2, u); ok {
 		return g, true
 	}
-	return parseGcsUrl(gcsStoragePathRegex, u)
+	if g, ok := parseGcsUrl(gcsStoragePathRegex, u); ok {
+		g.IsPublic = true
+		return g, true
+	}
+	return nil, false
 }
 
 func parseGcsUrl(re *regexp.Regexp, u *url.URL) (*GcsParams, bool) {

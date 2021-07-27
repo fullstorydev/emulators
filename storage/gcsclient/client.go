@@ -3,18 +3,19 @@ package gcsclient
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/option"
 )
 
 // NewTestClientWithHost returns a new Google storage client that connects to the given host:port address.
-func NewTestClientWithHost(ctx context.Context, addr string) (*storage.Client, error) {
+func NewTestClientWithHost(ctx context.Context, hostUrl string) (*storage.Client, error) {
 	delegate := http.DefaultTransport
 	httpClient := &http.Client{
 		Transport: tripperFunc(func(r *http.Request) (*http.Response, error) {
 			r = r.Clone(r.Context())
-			r.URL.Host = addr
+			r.URL.Host = strings.TrimPrefix(hostUrl, "http://")
 			r.URL.Scheme = "http"
 			return delegate.RoundTrip(r)
 		}),

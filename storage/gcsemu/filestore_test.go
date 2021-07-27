@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -37,9 +36,11 @@ func TestFileStore(t *testing.T) {
 	}))
 	t.Cleanup(svr.Close)
 
-	host := strings.TrimPrefix(svr.URL, "http://")
-	gcsClient, err := gcsclient.NewTestClientWithHost(context.Background(), host)
+	gcsClient, err := gcsclient.NewTestClientWithHost(context.Background(), svr.URL)
 	assert.NilError(t, err)
+	t.Cleanup(func() {
+		_ = gcsClient.Close()
+	})
 
 	bh := BucketHandle{
 		Name:         "file-bucket",
@@ -58,6 +59,6 @@ func TestFileStore(t *testing.T) {
 
 	t.Run("RawHttp", func(t *testing.T) {
 		t.Parallel()
-		testRawHttp(t, bh, host)
+		testRawHttp(t, bh, http.DefaultClient, svr.URL)
 	})
 }
