@@ -13,7 +13,7 @@
 // limitations under the License.
 
 /*
-cbtemulator launches the in-memory Cloud Bigtable server on the given address.
+cbtemulator launches the Cloud Bigtable emulator on the given address.
 */
 package main
 
