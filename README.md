@@ -91,6 +91,18 @@ For on-disk pesistence:
 
 ## Google Cloud Storage Emulator
 
+Our storage emulator was written in house.
+- Supports basic file operations, iteration, attributes, copying, and some conditionals.
+- The storage layer is pluggable.
+- In memory btree (transient for unit tests) or disk-based storage (long running, persistence).
+
+### Installing
+
+```sh
+go get github.com/fullstorydev/emulators/storage
+go install github.com/fullstorydev/emulators/storage/... # for the command-line `gcsemulator`
+```
+
 ### Running, out of process
 
 Example, running on a specific port, with persistence:
