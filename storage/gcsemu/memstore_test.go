@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/fullstorydev/emulators/storage/gcsclient"
 	"gotest.tools/v3/assert"
 )
 
@@ -30,7 +29,7 @@ func TestMemStore(t *testing.T) {
 	}))
 	t.Cleanup(svr.Close)
 
-	gcsClient, err := gcsclient.NewTestClientWithHost(context.Background(), svr.URL)
+	gcsClient, err := NewTestClientWithHost(context.Background(), svr.URL)
 	assert.NilError(t, err)
 	t.Cleanup(func() {
 		_ = gcsClient.Close()

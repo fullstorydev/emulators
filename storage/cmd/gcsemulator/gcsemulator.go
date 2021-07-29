@@ -5,9 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net"
-	"net/http"
-	"net/http/httptest"
 
 	"github.com/fullstorydev/emulators/storage/gcsemu"
 )
@@ -16,10 +13,6 @@ var (
 	host = flag.String("host", "localhost", "the address to bind to on the local machine")
 	port = flag.Int("port", 9000, "the port number to bind to on the local machine")
 	dir  = flag.String("dir", "", "if set, use persistence in the given directory")
-)
-
-const (
-	maxMsgSize = 256 * 1024 * 1024 // 256 MiB
 )
 
 func main() {
@@ -39,24 +32,13 @@ func main() {
 		opts.Store = gcsemu.NewFileStore(*dir)
 	}
 
-	gcsEmu := gcsemu.NewGcsEmu(opts)
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", gcsEmu.Handler)
-
-	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if true {
-			log.Printf("about to method=%s host=%s u=%s", r.Method, r.Host, r.URL)
-		}
-		mux.ServeHTTP(w, r)
-	}))
-	addr := fmt.Sprintf("%s:%d", *host, *port)
-	l, err := net.Listen("tcp", addr)
+	laddr := fmt.Sprintf("%s:%d", *host, *port)
+	server, err := gcsemu.NewServer(laddr, opts)
 	if err != nil {
-		log.Fatalf("failed to listen on addr %s: %s", addr, err)
+		log.Fatalf("failed to start server: %s", err)
 	}
-	srv.Listener = l
-	srv.Start()
+	defer server.Close()
 
-	fmt.Printf("Cloud Storage emulator running on %s\n", srv.URL)
+	fmt.Printf("Cloud Storage emulator running on %s\n", server.Addr)
 	select {}
 }

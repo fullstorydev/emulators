@@ -64,6 +64,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to start emulator: %v", err)
 	}
+	defer srv.Close()
 
 	fmt.Printf("Cloud Bigtable emulator running on %s\n", srv.Addr)
 	select {}

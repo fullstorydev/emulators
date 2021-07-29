@@ -71,6 +71,7 @@ For unit tests:
 	if err != nil { 
 		// ...
 	}
+	defer srv.Close()
 	// bigtable.NewClient (via DefaultClientOptions) will look at this env var to figure out what host to talk to
 	os.Setenv("BIGTABLE_EMULATOR_HOST", svr.Addr)
 ```
@@ -124,16 +125,43 @@ Usage:
 
 For unit tests:
 ```go
-	// TODO
+	// start an in-memory Storage test server (for unit tests)
+	svr, err := gcsemu.NewServer("127.0.0.1:0", gcsemu.Options{})
+	if err != nil {
+		// ...
+	}
+	defer svr.Close()
+	// gcsemu.NewClient will look at this env var to figure out what host/port to talk to
+	os.Setenv("GCS_EMULATOR_HOST", svr.Addr)
 ```
 
 For on-disk persistence:
 ```go
-	// TODO
+	// start an on-disk Storage test server
+	svr, err := gcsemu.NewServer(fmt.Sprintf("127.0.0.1:%d", *port), gcsemu.Options{
+		Store: gcsemu.NewFileStore(*gcsDir),
+	})
 ```
 
 ### Connecting to the emulator from Go
 
 ```go
-	// TODO
+	// assuming GCS_EMULATOR_HOST is already set...
+	client, err := gcsemu.NewClient(ctx)
+	if err != nil {
+		// ...
+	}
+	defer client.Close()
 ```
+
+#### NOTE ####
+
+Do NOT use `STORAGE_EMULATOR_HOST`, as defined in `cloud.google.com/go/storage`.  There are unresolved issues in the Go
+client implementation.  `STORAGE_EMULATOR_HOST` is supported inconsistently, and even has some bugs that can cause
+data races when using the same `*storage.Client` for different types of access.
+
+See:
+- [storage: when using an emulator, it is not possible to use the same Client object for both uploading and other operations #2476](https://github.com/googleapis/google-cloud-go/issues/2476)
+- [Storage: empty readHost when STORAGE_EMULATOR_HOST is set to host:port #4444](https://github.com/googleapis/google-cloud-go/issues/4444)
+
+Instead, use our `gcsemu.NewClient(ctx)` method which swaps out the entire HTTP transport.
