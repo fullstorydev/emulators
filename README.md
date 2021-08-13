@@ -90,6 +90,23 @@ For on-disk persistence:
 	})
 ```
 
+### Connecting to the Bigtable emulator from Go
+
+```go
+	// assuming BIGTABLE_EMULATOR_HOST is already set...
+	conn, err := grpc.Dial(os.Getenv("BIGTABLE_EMULATOR_HOST"), grpc.WithInsecure())
+	if err != nil {
+		// ...
+	}
+	defer conn.Close() // only if the life cycle is scoped to this call
+
+	client, err := bigtable.NewClient(ctx, project, instance, option.WithGRPCConn(conn))
+	if err != nil {
+		// ...
+	}
+	tbl := client.Open("example")
+```
+
 ## Google Cloud Storage Emulator
 
 Our storage emulator was written in house.
@@ -143,7 +160,7 @@ For on-disk persistence:
 	})
 ```
 
-### Connecting to the emulator from Go
+### Connecting to the GCS emulator from Go
 
 ```go
 	// assuming GCS_EMULATOR_HOST is already set...
@@ -151,7 +168,7 @@ For on-disk persistence:
 	if err != nil {
 		// ...
 	}
-	defer client.Close()
+	defer client.Close() // only if the life cycle is scoped to this call
 ```
 
 #### NOTE ####
