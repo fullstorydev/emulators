@@ -59,7 +59,7 @@ func validateServer(srvAddr string) {
 
 	ctx := context.Background()
 	fileContent := "FullStory\n" +
-		"Google Could Storage Emulator\n" +
+		"Google Cloud Storage Emulator\n" +
 		"Gophers!\n"
 
 	client, err := gcsemu.NewClient(ctx)
