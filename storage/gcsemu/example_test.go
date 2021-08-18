@@ -13,32 +13,36 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package bttest_test
+package gcsemu_test
 
 import (
-	"cloud.google.com/go/bigtable"
 	"context"
 	"fmt"
-	"github.com/fullstorydev/emulators/bigtable/bttest"
+	"github.com/fullstorydev/emulators/storage/gcsemu"
 	"github.com/testcontainers/testcontainers-go"
-	"google.golang.org/api/option"
-	"google.golang.org/grpc"
+	"io"
+	"io/ioutil"
 	"log"
+	"os"
+	"strings"
+	"testing"
 )
 
-func ExampleLocalServer() {
-	srv, err := bttest.NewServer("localhost:0")
+func TestExampleLocalServer(t *testing.T) {
+	srv, err := gcsemu.NewServer("127.0.0.1:0", gcsemu.Options{})
 	if err != nil {
 		log.Fatalln(err)
 	}
+	defer srv.Close()
 
 	validateServer(srv.Addr)
 }
 
-func ExampleContainerServer() {
+
+func TestExampleContainerServer(t *testing.T) {
 	ctx := context.Background()
 	req := testcontainers.ContainerRequest{
-		Image:        "cbtemulator",
+		Image:        "gcsemulator",
 		ExposedPorts: []string{"9000"},
 	}
 	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
@@ -66,51 +70,44 @@ func ExampleContainerServer() {
 }
 
 func validateServer(srvAddr string) {
+	// gcsemu.NewClient will look at this env var to figure out what host/port to talk to
+	os.Setenv("GCS_EMULATOR_HOST", srvAddr)
+
 	ctx := context.Background()
+	fileContent := "FullStory\n" +
+		"Google Could Storage Emulator\n" +
+		"Gophers!\n"
 
-	conn, err := grpc.Dial(srvAddr, grpc.WithInsecure())
+	client, err := gcsemu.NewClient(ctx)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer client.Close()
+
+	o := client.Bucket("test").Object("data/test.txt")
+	writer := o.NewWriter(ctx)
+
+	_, err = io.Copy(writer, strings.NewReader(fileContent))
+	if err != nil {
+		log.Fatalln(err)
+	}
+	err = writer.Close()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	proj, instance := "proj", "instance"
-
-	adminClient, err := bigtable.NewAdminClient(ctx, proj, instance, option.WithGRPCConn(conn))
+	reader, err := o.NewReader(ctx)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	if err = adminClient.CreateTable(ctx, "example"); err != nil {
-		log.Fatalln(err)
-	}
+	res, err := ioutil.ReadAll(reader)
 
-	if err = adminClient.CreateColumnFamily(ctx, "example", "links"); err != nil {
-		log.Fatalln(err)
-	}
-
-	client, err := bigtable.NewClient(ctx, proj, instance, option.WithGRPCConn(conn))
-	if err != nil {
-		log.Fatalln(err)
-	}
-	tbl := client.Open("example")
-
-	mut := bigtable.NewMutation()
-	mut.Set("links", "golang.org", bigtable.Now(), []byte("Gophers!"))
-	if err = tbl.Apply(ctx, "com.google.cloud", mut); err != nil {
-		log.Fatalln(err)
-	}
-
-	if row, err := tbl.ReadRow(ctx, "com.google.cloud"); err != nil {
-		log.Fatalln(err)
-	} else {
-		for _, column := range row["links"] {
-			fmt.Println(column.Column)
-			fmt.Println(string(column.Value))
-		}
-	}
+	fmt.Printf("%s", string(res))
 
 	// Output:
-	// links:golang.org
+	// FullStory
+	// Google Could Storage Emulator
 	// Gophers!
 }
 
