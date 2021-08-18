@@ -17,7 +17,6 @@ WORKDIR /
 
 COPY --from=build /app/cbtemulator /cbtemulator
 
-USER nonroot:nonroot
 EXPOSE 9000
 
 ENTRYPOINT ["/cbtemulator", "-port", "9000", "-host", "0.0.0.0", "-dir", "var/bigtable"]

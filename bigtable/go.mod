@@ -9,6 +9,7 @@ require (
 	github.com/google/btree v1.0.1
 	github.com/google/go-cmp v0.5.6
 	github.com/syndtr/goleveldb v1.0.0
+	github.com/testcontainers/testcontainers-go v0.11.1 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20210603125802-9665404d3644 // indirect
 	google.golang.org/api v0.47.0
