@@ -1,36 +1,47 @@
-## Build
-FROM golang:1.13-buster AS build
+FROM golang:1.13-alpine As builder
+MAINTAINER FullStory Engineering
 
-COPY bigtable /src/bigtable
-COPY storage /src/storage
+# create non-privileged group and user
+RUN addgroup -S emulators && adduser -S emulators -G emulators
+RUN mkdir -p /data
 
-WORKDIR /src/bigtable/
-RUN go mod download
-RUN go build -o /cbtemulator ./cmd/cbtemulator
+ENV CGO_ENABLED=0
+ENV GOOS=linux
+ENV GOARCH=amd64
+ENV GO111MODULE=on
 
-WORKDIR /src/storage/
-RUN go mod download
-RUN go build -o /gcsemulator ./cmd/gcsemulator
+WORKDIR /tmp/fullstorydev/bigtable
+COPY VERSION bigtable /tmp/fullstorydev/bigtable/
+RUN go build -o /cbtemulator \
+    -ldflags "-w -extldflags \"-static\" -X \"main.version=$(cat VERSION)\"" \
+    ./cmd/cbtemulator
 
-## Deploy
-FROM gcr.io/distroless/base-debian10 AS cbtemulator
+WORKDIR /tmp/fullstorydev/storage
+COPY VERSION storage /tmp/fullstorydev/storage/
+RUN go build -o /gcsemulator \
+    -ldflags "-w -extldflags \"-static\" -X \"main.version=$(cat VERSION)\"" \
+    ./cmd/gcsemulator
 
+
+### Deploy
+FROM scratch AS cbtemulator
 WORKDIR /
-
-COPY --from=build /cbtemulator /cbtemulator
-
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=builder /etc/passwd /etc/passwd
+COPY --from=builder /cbtemulator /bin/cbtemulator
+COPY --from=builder --chown=emulators /data /data
 EXPOSE 9000
+USER emulators
+ENTRYPOINT ["/bin/cbtemulator", "-port", "9000", "-host", "0.0.0.0", "-dir", "/data"]
 
-ENTRYPOINT ["/cbtemulator", "-port", "9000", "-host", "0.0.0.0", "-dir", "var/bigtable"]
 
-
-## Deploy
-FROM gcr.io/distroless/base-debian10 AS gcsemulator
-
+### Deploy
+FROM scratch AS gcsemulator
 WORKDIR /
-
-COPY --from=build /gcsemulator /gcsemulator
-
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=builder /etc/passwd /etc/passwd
+COPY --from=builder /gcsemulator /bin/gcsemulator
+COPY --from=builder --chown=emulators /data /data
 EXPOSE 9000
-
-ENTRYPOINT ["/gcsemulator", "-port", "9000", "-host", "0.0.0.0", "-dir", "var/storage"]
+USER emulators
+ENTRYPOINT ["/bin/gcsemulator", "-port", "9000", "-host", "0.0.0.0", "-dir", "/data"]

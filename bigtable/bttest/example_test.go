@@ -24,21 +24,25 @@ import (
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
 	"log"
+	"testing"
 )
 
-func ExampleLocalServer() {
+func TestExampleLocalServer(t *testing.T) {
 	srv, err := bttest.NewServer("localhost:0")
 	if err != nil {
-		log.Fatalln(err)
+		t.Fatal(err)
 	}
 
-	validateServer(srv.Addr)
+	err = validateServer(srv.Addr)
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
-func ExampleContainerServer() {
+func TestExampleContainerServer(t *testing.T) {
 	ctx := context.Background()
 	req := testcontainers.ContainerRequest{
-		Image:        "cbtemulator",
+		Image:        "fullstorydev/cbtemulator:latest",
 		ExposedPorts: []string{"9000"},
 	}
 	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
@@ -46,46 +50,49 @@ func ExampleContainerServer() {
 		Started:          true,
 	})
 	if err != nil {
-		log.Fatalln(err)
+		t.Fatal(err)
 	}
 	defer c.Terminate(ctx)
 
 	ip, err := c.Host(ctx)
 	if err != nil {
-		log.Fatalln(err)
+		t.Fatal(err)
 	}
 	port, err := c.MappedPort(ctx, "9000")
 	if err != nil {
-		log.Fatalln(err)
+		t.Fatal(err)
 	}
 
 	srvAddr := fmt.Sprintf("%s:%s", ip, port.Port())
 	fmt.Printf("Big table container started on %s\n", srvAddr)
 
-	validateServer(srvAddr)
+	err = validateServer(srvAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
-func validateServer(srvAddr string) {
+func validateServer(srvAddr string) error {
 	ctx := context.Background()
 
 	conn, err := grpc.Dial(srvAddr, grpc.WithInsecure())
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	proj, instance := "proj", "instance"
 
 	adminClient, err := bigtable.NewAdminClient(ctx, proj, instance, option.WithGRPCConn(conn))
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	if err = adminClient.CreateTable(ctx, "example"); err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	if err = adminClient.CreateColumnFamily(ctx, "example", "links"); err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	client, err := bigtable.NewClient(ctx, proj, instance, option.WithGRPCConn(conn))
@@ -97,20 +104,21 @@ func validateServer(srvAddr string) {
 	mut := bigtable.NewMutation()
 	mut.Set("links", "golang.org", bigtable.Now(), []byte("Gophers!"))
 	if err = tbl.Apply(ctx, "com.google.cloud", mut); err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	if row, err := tbl.ReadRow(ctx, "com.google.cloud"); err != nil {
-		log.Fatalln(err)
+		return err
 	} else {
 		for _, column := range row["links"] {
-			fmt.Println(column.Column)
-			fmt.Println(string(column.Value))
+			if column.Column != "links:golang.org" {
+				return fmt.Errorf("response [%s] != [links:golang.org]", column.Column)
+			}
+			if string(column.Value) != "Gophers!" {
+				return fmt.Errorf("response [%s] != [Gophers!]", string(column.Value))
+			}
 		}
 	}
 
-	// Output:
-	// links:golang.org
-	// Gophers!
+	return nil
 }
-

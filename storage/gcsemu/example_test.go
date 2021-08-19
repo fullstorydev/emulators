@@ -7,7 +7,6 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"strings"
 	"testing"
@@ -16,17 +15,20 @@ import (
 func TestExampleLocalServer(t *testing.T) {
 	srv, err := gcsemu.NewServer("127.0.0.1:0", gcsemu.Options{})
 	if err != nil {
-		log.Fatalln(err)
+		t.Fatal(err)
 	}
 	defer srv.Close()
 
-	validateServer(srv.Addr)
+	err = validateServer(srv.Addr)
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestExampleContainerServer(t *testing.T) {
 	ctx := context.Background()
 	req := testcontainers.ContainerRequest{
-		Image:        "gcsemulator",
+		Image:        "fullstorydev/gcsemulator:latest",
 		ExposedPorts: []string{"9000"},
 	}
 	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
@@ -34,26 +36,29 @@ func TestExampleContainerServer(t *testing.T) {
 		Started:          true,
 	})
 	if err != nil {
-		log.Fatalln(err)
+		t.Fatal(err)
 	}
 	defer c.Terminate(ctx)
 
 	ip, err := c.Host(ctx)
 	if err != nil {
-		log.Fatalln(err)
+		t.Fatal(err)
 	}
 	port, err := c.MappedPort(ctx, "9000")
 	if err != nil {
-		log.Fatalln(err)
+		t.Fatal(err)
 	}
 
 	srvAddr := fmt.Sprintf("%s:%s", ip, port.Port())
 	fmt.Printf("Big table container started on %s\n", srvAddr)
 
-	validateServer(srvAddr)
+	err = validateServer(srvAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
-func validateServer(srvAddr string) {
+func validateServer(srvAddr string) error {
 	// gcsemu.NewClient will look at this env var to figure out what host/port to talk to
 	os.Setenv("GCS_EMULATOR_HOST", srvAddr)
 
@@ -64,7 +69,7 @@ func validateServer(srvAddr string) {
 
 	client, err := gcsemu.NewClient(ctx)
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 	defer client.Close()
 
@@ -73,25 +78,25 @@ func validateServer(srvAddr string) {
 
 	_, err = io.Copy(writer, strings.NewReader(fileContent))
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 	err = writer.Close()
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	reader, err := o.NewReader(ctx)
 	if err != nil {
-		log.Fatalln(err)
+		return err
+
 	}
 
 	res, err := ioutil.ReadAll(reader)
 
-	fmt.Printf("%s", string(res))
+	if string(res) != fileContent {
+		return fmt.Errorf("response [%s] != file content [%s]", string(res), fileContent)
+	}
 
-	// Output:
-	// FullStory
-	// Google Could Storage Emulator
-	// Gophers!
+	return nil
 }
 
