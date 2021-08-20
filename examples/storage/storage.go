@@ -1,4 +1,4 @@
-package gcsemu_test
+package storage
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-func TestExampleLocalServer(t *testing.T) {
+func LocalServer(t *testing.T) {
 	srv, err := gcsemu.NewServer("127.0.0.1:0", gcsemu.Options{})
 	if err != nil {
 		t.Fatal(err)
@@ -25,10 +25,10 @@ func TestExampleLocalServer(t *testing.T) {
 	}
 }
 
-func TestExampleContainerServer(t *testing.T) {
+func ContainerServer(t *testing.T) {
 	ctx := context.Background()
 	req := testcontainers.ContainerRequest{
-		Image:        "fullstorydev/gcsemulator:latest",
+		Image:        "fullstorydev/gcsemulator:b5414bf-dirty",
 		ExposedPorts: []string{"9000"},
 	}
 	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
