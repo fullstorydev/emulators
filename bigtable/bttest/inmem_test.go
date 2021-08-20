@@ -330,7 +330,7 @@ func TestTableRowsConcurrent(t *testing.T) {
 		}
 	}
 
-	attempts := 500
+	attempts := 5
 	finished := make(chan bool)
 	go func() {
 		populate()
