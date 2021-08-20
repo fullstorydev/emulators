@@ -4,12 +4,13 @@ import (
 	"cloud.google.com/go/bigtable"
 	"context"
 	"fmt"
+	"log"
+	"testing"
+
 	"github.com/fullstorydev/emulators/bigtable/bttest"
 	"github.com/testcontainers/testcontainers-go"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
-	"log"
-	"testing"
 )
 
 func TestLocalServer(t *testing.T) {

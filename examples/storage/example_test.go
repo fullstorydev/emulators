@@ -3,13 +3,14 @@ package storage
 import (
 	"context"
 	"fmt"
-	"github.com/fullstorydev/emulators/storage/gcsemu"
-	"github.com/testcontainers/testcontainers-go"
 	"io"
 	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/fullstorydev/emulators/storage/gcsemu"
+	"github.com/testcontainers/testcontainers-go"
 )
 
 func TestLocalServer(t *testing.T) {
@@ -99,4 +100,3 @@ func validateServer(srvAddr string) error {
 
 	return nil
 }
-
