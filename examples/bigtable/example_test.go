@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-func LocalServer(t *testing.T) {
+func TestLocalServer(t *testing.T) {
 	srv, err := bttest.NewServer("localhost:0")
 	if err != nil {
 		t.Fatal(err)
@@ -24,10 +24,10 @@ func LocalServer(t *testing.T) {
 	}
 }
 
-func ContainerServer(t *testing.T) {
+func TestContainerServer(t *testing.T) {
 	ctx := context.Background()
 	req := testcontainers.ContainerRequest{
-		Image:        "fullstorydev/cbtemulator:b5414bf-dirty",
+		Image:        "fullstorydev/cbtemulator:latest",
 		ExposedPorts: []string{"9000"},
 	}
 	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{

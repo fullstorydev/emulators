@@ -12,8 +12,8 @@ import (
 	"testing"
 )
 
-func LocalServer(t *testing.T) {
-	srv, err := gcsemu.NewServer("127.0.0.1:0", gcsemu.Options{})
+func TestLocalServer(t *testing.T) {
+	srv, err := gcsemu.NewServer("localhost:0", gcsemu.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,10 +25,10 @@ func LocalServer(t *testing.T) {
 	}
 }
 
-func ContainerServer(t *testing.T) {
+func TestContainerServer(t *testing.T) {
 	ctx := context.Background()
 	req := testcontainers.ContainerRequest{
-		Image:        "fullstorydev/gcsemulator:b5414bf-dirty",
+		Image:        "fullstorydev/gcsemulator:latest",
 		ExposedPorts: []string{"9000"},
 	}
 	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
@@ -50,7 +50,7 @@ func ContainerServer(t *testing.T) {
 	}
 
 	srvAddr := fmt.Sprintf("%s:%s", ip, port.Port())
-	fmt.Printf("Big table container started on %s\n", srvAddr)
+	fmt.Printf("Storage container started on %s\n", srvAddr)
 
 	err = validateServer(srvAddr)
 	if err != nil {
