@@ -67,7 +67,7 @@ You can link bigtable emulator into existing Go binaries as a drop-in replacemen
 For unit tests:
 ```go
 	// start an in-memory leveldb BigTable test server (for unit tests)
-	svr, err := bttest.NewServer("127.0.0.1:0", grpc.MaxRecvMsgSize(math.MaxInt32))
+	srv, err := bttest.NewServer("127.0.0.1:0", grpc.MaxRecvMsgSize(math.MaxInt32))
 	if err != nil { 
 		// ...
 	}
