@@ -1,6 +1,6 @@
 module github.com/fullstorydev/emulators/storage
 
-go 1.13
+go 1.16
 
 require (
 	cloud.google.com/go v0.83.0 // indirect

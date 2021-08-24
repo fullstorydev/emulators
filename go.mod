@@ -1,6 +1,6 @@
 module github.com/fullstorydev/emulators
 
-go 1.13
+go 1.16
 
 require (
 	github.com/gordonklaus/ineffassign v0.0.0-20210729092907-69aca2aeecd0 // indirect

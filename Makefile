@@ -1,32 +1,22 @@
 dev_build_version=$(shell git describe --tags --always --dirty)
 
-# TODO: run golint and errcheck, but only to catch *new* violations and
-# decide whether to change code or not (e.g. we need to be able to whitelist
-# violations already in the code). They can be useful to catch errors, but
-# they are just too noisy to be a requirement for a CI -- we don't even *want*
-# to fix some of the things they consider to be violations.
 .PHONY: ci
 ci: deps checkgofmt vet staticcheck ineffassign predeclared test
 
-.PHONY: bigtable
-bigtable:
-	$(eval SERVICE := bigtable)
-
-.PHONY: storage
-storage:
-	$(eval SERVICE := storage)
-
 .PHONY: deps
 deps:
-	cd ${SERVICE} && go get -d -v -t ./...
+	cd bigtable && go get -d -v -t ./...
+	cd storage && go get -d -v -t ./...
 
 .PHONY: updatedeps
 updatedeps:
-	cd ${SERVICE} && go get -d -v -t -u -f ./...
+	cd bigtable && go get -d -v -t -u -f ./...
+	cd storage && go get -d -v -t -u -f ./...
 
 .PHONY: install
 install:
-	go install -ldflags '-X "main.version=dev build $(dev_build_version)"' ./...
+	cd bigtable && go install -ldflags '-X "main.version=dev build $(dev_build_version)"' ./...
+	cd storage && go install -ldflags '-X "main.version=dev build $(dev_build_version)"' ./...
 
 .PHONY: release
 release:
@@ -42,44 +32,57 @@ docker:
 
 .PHONY: checkgofmt
 checkgofmt:
-	cd ${SERVICE} && gofmt -s -l .
-	@if [ -n "$$(cd ${SERVICE} && gofmt -s -l .)" ]; then \
+	cd bigtable && gofmt -s -l .
+	@if [ -n "$$(cd bigtable && gofmt -s -l .)" ]; then \
+		exit 1; \
+	fi
+
+	cd storage && gofmt -s -l .
+	@if [ -n "$$(cd storage && gofmt -s -l .)" ]; then \
 		exit 1; \
 	fi
 
 .PHONY: vet
 vet:
-	cd ${SERVICE} && go vet ./...
+	# won't run for bigtable since it's a fork and the source already contains some problems
+	# cd bigtable && go vet ./...
+	cd storage && go vet ./...
 
 # This all works fine with Go modules, but without modules,
 # CI is just getting latest master for dependencies like grpc.
 .PHONY: staticcheck
 staticcheck:
 	@GO111MODULE=on go install honnef.co/go/tools/cmd/staticcheck
-	cd ${SERVICE} && staticcheck ./...
+	cd bigtable && staticcheck ./...
+	cd storage && staticcheck ./...
 
 .PHONY: ineffassign
 ineffassign:
 	@GO111MODULE=on go install github.com/gordonklaus/ineffassign
-	cd ${SERVICE} && ineffassign .
+	cd bigtable && ineffassign .
+	cd storage && ineffassign .
 
 .PHONY: predeclared
 predeclared:
 	@GO111MODULE=on go install github.com/nishanths/predeclared
-	cd ${SERVICE} && predeclared .
+	cd bigtable && predeclared .
+	cd storage && predeclared .
 
 # Intentionally omitted from CI, but target here for ad-hoc reports.
 .PHONY: golint
 golint:
 	@GO111MODULE=on go install golang.org/x/lint/golint
-	cd ${SERVICE} && golint -min_confidence 0.9 -set_exit_status ./...
+	cd bigtable && golint -min_confidence 0.9 -set_exit_status ./...
+	cd storage && golint -min_confidence 0.9 -set_exit_status ./...
 
 # Intentionally omitted from CI, but target here for ad-hoc reports.
 .PHONY: errcheck
 errcheck:
 	@GO111MODULE=on go install github.com/kisielk/errcheck
-	cd ${SERVICE} && errcheck ./...
+	cd bigtable && errcheck ./...
+	cd storage && errcheck ./...
 
 .PHONY: test
 test:
-	cd ${SERVICE} && go test -race ./...
+	cd bigtable && go test -race ./...
+	cd storage && go test -race ./...
