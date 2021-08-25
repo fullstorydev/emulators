@@ -16,9 +16,11 @@ updatedeps:
 install:
 	go install -ldflags '-X "main.version=dev build $(dev_build_version)"' ./...
 
-.PHONY: release
-release:
-	goreleaser --rm-dist
+.PHONY: docker
+docker:
+	@echo $(dev_build_version) > VERSION
+	docker build --target=cbtemulator -t fullstorydev/cbtemulator:$(dev_build_version)
+	@rm VERSION
 
 .PHONY: checkgofmt
 checkgofmt:
@@ -39,7 +41,7 @@ staticcheck:
 
 .PHONY: ineffassign
 ineffassign:
-	ineffassign ./...
+	ineffassign .
 
 .PHONY: predeclared
 predeclared:
