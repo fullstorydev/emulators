@@ -2,13 +2,13 @@ dev_build_version=$(shell git describe --tags --always --dirty)
 
 .PHONY: ci
 ci:
-	cd bigtable && make ci
-	cd storage && make ci
+	$(MAKE) -C bigtable ci
+	$(MAKE) -C storage ci
 
 .PHONY: install
 install:
-	cd bigtable && make install
-	cd storage && make install
+	$(MAKE) -C bigtable install
+	$(MAKE) -C storage install
 
 .PHONY: release
 release:
@@ -17,10 +17,10 @@ release:
 
 .PHONY: docker
 docker:
-	cd bigtable && make docker
-	cd storage && make docker
+	$(MAKE) -C bigtable docker
+	$(MAKE) -C storage docker
 
 .PHONY: test
 test:
-	cd bigtable && make test
-	cd storage && make test
+	$(MAKE) -C bigtable test
+	$(MAKE) -C storage test
