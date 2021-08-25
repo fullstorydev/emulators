@@ -9,14 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	emptypb "github.com/golang/protobuf/ptypes/empty"
 	btapb "google.golang.org/genproto/googleapis/bigtable/admin/v2"
 	btpb "google.golang.org/genproto/googleapis/bigtable/v2"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 type clientIntfFunc func(t *testing.T, name string) (context.Context, *clientIntf, bool)
@@ -51,21 +49,6 @@ func newClient(t *testing.T) (context.Context, *clientIntf, bool) {
 	}
 
 	return ctx, cl, false
-}
-
-func dropRowRange(t *testing.T, ctx context.Context, ret *clientIntf) (context.Context, *clientIntf, bool) {
-	_, err := ret.DropRowRange(ctx, &btapb.DropRowRangeRequest{
-		Name:   ret.tblName,
-		Target: &btapb.DropRowRangeRequest_DeleteAllDataFromTable{DeleteAllDataFromTable: true},
-	})
-	if err != nil {
-		if s, ok := status.FromError(err); ok && s.Code() == codes.NotFound {
-			return ctx, ret, false
-		} else {
-			t.Fatal(err)
-		}
-	}
-	return ctx, ret, true
 }
 
 type streamAdapter struct {

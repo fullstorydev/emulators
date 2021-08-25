@@ -1,28 +1,19 @@
 package gcsutil
 
+// go:generate protoc --go_out=. --go_opt=paths=source_relative gcspagetoken.proto
+
 import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 )
-
-// The internal format of a GCS PageToken cursor.
-type gcsPageToken struct {
-	// The full name of the last result file, when returned from the server.
-	// When sent as a cursor, interpreted as "return files greater than this value".
-	LastFile string `protobuf:"bytes,1,opt,name=lastFile" json:"lastFile,omitempty"`
-}
-
-func (m *gcsPageToken) Reset()         { *m = gcsPageToken{} }
-func (m *gcsPageToken) String() string { return proto.CompactTextString(m) }
-func (*gcsPageToken) ProtoMessage()    {}
 
 // EncodePageToken returns a synthetic page token to find files greater than the given string.
 // If this is part of a prefix query, the token should fall within the prefixed range.
 // BRITTLE: relies on a reverse-engineered internal GCS token format, which may be subject to change.
 func EncodePageToken(greaterThan string) string {
-	bytes, err := proto.Marshal(&gcsPageToken{
+	bytes, err := proto.Marshal(&GcsPageToken{
 		LastFile: greaterThan,
 	})
 	if err != nil {
@@ -37,7 +28,7 @@ func DecodePageToken(pageToken string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not base64 decode pageToken %s: %w", pageToken, err)
 	}
-	var message gcsPageToken
+	var message GcsPageToken
 	if err := proto.Unmarshal(bytes, &message); err != nil {
 		return "", fmt.Errorf("could not unmarshal proto: %w", err)
 	}

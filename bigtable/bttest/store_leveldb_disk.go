@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/comparer"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	btapb "google.golang.org/genproto/googleapis/bigtable/admin/v2"
+	"google.golang.org/protobuf/proto"
 )
 
 // LeveldbDiskStorage stores data persistently on leveldb.
@@ -42,6 +42,9 @@ func (f LeveldbDiskStorage) GetTables() []*btapb.Table {
 	// Ignore any errors, just return
 	var ret []*btapb.Table
 	err := filepath.Walk(f.Root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
 		if !strings.HasSuffix(path, ".table.proto") {
 			return nil
 		}

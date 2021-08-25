@@ -27,7 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sync/errgroup"
@@ -35,6 +34,7 @@ import (
 	btpb "google.golang.org/genproto/googleapis/bigtable/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 type clientIntf struct {
@@ -1602,10 +1602,10 @@ func TestFilterRow(t *testing.T) {
 	} {
 		got, err := filterRow(test.filter, copyRow(row))
 		if err != nil {
-			t.Errorf("%s: got unexpected error: %v", proto.CompactTextString(test.filter), err)
+			t.Errorf("%s: got unexpected error: %v", test.filter, err)
 		}
 		if got != test.want {
-			t.Errorf("%s: got %t, want %t", proto.CompactTextString(test.filter), got, test.want)
+			t.Errorf("%s: got %t, want %t", test.filter, got, test.want)
 		}
 	}
 }
@@ -1650,10 +1650,10 @@ func TestFilterRowWithErrors(t *testing.T) {
 	} {
 		got, err := filterRow(test.badRegex, copyRow(row))
 		if got != false {
-			t.Errorf("%s: got true, want false", proto.CompactTextString(test.badRegex))
+			t.Errorf("%s: got true, want false", test.badRegex)
 		}
 		if err == nil {
-			t.Errorf("%s: got no error, want error", proto.CompactTextString(test.badRegex))
+			t.Errorf("%s: got no error, want error", test.badRegex)
 		}
 	}
 }

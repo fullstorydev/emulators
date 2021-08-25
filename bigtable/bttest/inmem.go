@@ -172,7 +172,7 @@ func (s *Server) Close() {
 	}
 	s.s.mu.Unlock()
 
-	for _, tbl := range s.s.tables {
+	for _, tbl := range tbls {
 		func() {
 			tbl.mu.Lock()
 			defer tbl.mu.Unlock()

@@ -3,10 +3,10 @@ package bttest
 import (
 	"bytes"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/google/btree"
 	btapb "google.golang.org/genproto/googleapis/bigtable/admin/v2"
 	btpb "google.golang.org/genproto/googleapis/bigtable/v2"
+	"google.golang.org/protobuf/proto"
 )
 
 const btreeDegree = 16
