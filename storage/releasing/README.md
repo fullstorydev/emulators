@@ -41,7 +41,7 @@ The steps to do a GitHub-only release (vs. running the entire script) are the fo
 
 ```sh
 # from the root of the repo
-git tag v2.3.4
+git tag storage/v2.3.4
 GITHUB_TOKEN=abcdef0123456789abcdef \
     GO111MODULE=on \
     make release
