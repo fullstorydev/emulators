@@ -10,11 +10,6 @@ install:
 	$(MAKE) -C bigtable install
 	$(MAKE) -C storage install
 
-.PHONY: release
-release:
-	@GO111MODULE=on go install github.com/goreleaser/goreleaser
-	goreleaser --rm-dist
-
 .PHONY: docker
 docker:
 	$(MAKE) -C bigtable docker

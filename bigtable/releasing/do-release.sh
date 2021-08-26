@@ -26,7 +26,7 @@ cd "$(dirname "$0")/.."
 
 # GitHub release
 
-$PREFIX git tag "$VERSION"
+$PREFIX git tag bigtable/"$VERSION"
 # make sure GITHUB_TOKEN is exported, for the benefit of this next command
 export GITHUB_TOKEN
 GO111MODULE=on $PREFIX make release
@@ -40,11 +40,8 @@ $PREFIX git checkout go.mod go.sum
 # if there are no valid current credentials.
 $PREFIX docker login
 echo "$VERSION" > VERSION
-$PREFIX docker build --target=gcsemulator -t "fullstorydev/gcsemulator:${VERSION}" -t fullstorydev/gcsemulator:latest .
 $PREFIX docker build --target=cbtemulator -t "fullstorydev/cbtemulator:${VERSION}" -t fullstorydev/cbtemulator:latest .
 rm VERSION
 # push to docker hub, both the given version as a tag and for "latest" tag
-$PREFIX docker push "fullstorydev/gcsemulator:${VERSION}"
-$PREFIX docker push fullstorydev/gcsemulator:latest
 $PREFIX docker push "fullstorydev/cbtemulator:${VERSION}"
 $PREFIX docker push fullstorydev/cbtemulator:latest

@@ -1,6 +1,6 @@
-# Releases of emulators
+# Releases of emulators/storage
 
-This document provides instructions for building a release of `emulators`.
+This document provides instructions for building a release of `emulators/storage`.
 
 The release process consists of a handful of tasks:
 1. Drop a release tag in git.
@@ -58,11 +58,8 @@ To re-run only the Docker Hub release steps, we need to build an image with the 
 ```sh
 # from the root of the repo
 docker build --target=gcsemulator -t fullstorydev/gcsemulator:v2.3.4 -t fullstorydev/gcsemulator:latest .
-docker build --target=cbtemulator -t fullstorydev/cbtemulator:v2.3.4 -t fullstorydev/cbtemulator:latest .
 docker push fullstorydev/gcsemulator:v2.3.4
 docker push fullstorydev/gcsemulator:latest
-docker push fullstorydev/cbtemulator:v2.3.4
-docker push fullstorydev/cbtemulator:latest
 ```
 
 If the `docker push ...` steps fail, you may need to run `docker login`, enter your Docker Hub login credentials, and then try to push again.
