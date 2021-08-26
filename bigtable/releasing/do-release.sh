@@ -26,6 +26,7 @@ cd "$(dirname "$0")/.."
 
 # GitHub release
 
+# release target requires that the current SHA have a sem-ver tag. That's the version it will use when creating the release.
 $PREFIX git tag bigtable/"$VERSION"
 # make sure GITHUB_TOKEN is exported, for the benefit of this next command
 export GITHUB_TOKEN
