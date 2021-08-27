@@ -4,9 +4,10 @@ This document provides instructions for building a release of `emulators/storage
 
 The release process consists of a handful of tasks:
 1. Drop a release tag in git.
-2. Creates a release in GitHub and creates provisional release notes (in the form of a change log).
-3. Build a docker image for the new release.
-4. Push the docker image to Docker Hub, with both a version tag and the "latest" tag.
+2. Build binaries for various platforms. This is done using the local go tool and uses GOOS and GOARCH environment variables to cross-compile for supported platforms.
+3. Creates a release in GitHub, uploads the binaries, and creates provisional release notes (in the form of a change log).
+4. Build a docker image for the new release.
+5. Push the docker image to Docker Hub, with both a version tag and the "latest" tag.
 
 Most of this is automated via a script in this same directory. The main thing you will need is a GitHub personal access token, which will be used for creating the release in GitHub (so you need write access to the fullstorydev/emulators repo).
 
