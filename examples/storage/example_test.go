@@ -89,10 +89,12 @@ func validateServer(srvAddr string) error {
 	reader, err := o.NewReader(ctx)
 	if err != nil {
 		return err
-
 	}
 
 	res, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return err
+	}
 
 	if string(res) != fileContent {
 		return fmt.Errorf("response [%s] != file content [%s]", string(res), fileContent)

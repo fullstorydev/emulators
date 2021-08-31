@@ -1,8 +1,21 @@
 dev_build_version=$(shell git describe --tags --always --dirty)
 
+.PHONY: ci
+ci:
+	$(MAKE) -C bigtable ci
+	$(MAKE) -C storage ci
+
+.PHONY: install
+install:
+	$(MAKE) -C bigtable install
+	$(MAKE) -C storage install
+
 .PHONY: docker
 docker:
-	@echo $(dev_build_version) > VERSION
-	docker build --target=gcsemulator -t fullstorydev/gcsemulator:$(dev_build_version) -t fullstorydev/gcsemulator:latest .
-	docker build --target=cbtemulator -t fullstorydev/cbtemulator:$(dev_build_version) -t fullstorydev/cbtemulator:latest .
-	@rm VERSION
+	$(MAKE) -C bigtable docker
+	$(MAKE) -C storage docker
+
+.PHONY: test
+test:
+	$(MAKE) -C bigtable test
+	$(MAKE) -C storage test

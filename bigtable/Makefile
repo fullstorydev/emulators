@@ -1,10 +1,5 @@
 dev_build_version=$(shell git describe --tags --always --dirty)
 
-# TODO: run golint and errcheck, but only to catch *new* violations and
-# decide whether to change code or not (e.g. we need to be able to whitelist
-# violations already in the code). They can be useful to catch errors, but
-# they are just too noisy to be a requirement for a CI -- we don't even *want*
-# to fix some of the things they consider to be violations.
 .PHONY: ci
 ci: deps checkgofmt vet staticcheck ineffassign predeclared test
 
@@ -24,6 +19,12 @@ install:
 .PHONY: release
 release:
 	goreleaser --rm-dist
+
+.PHONY: docker
+docker:
+	@echo $(dev_build_version) > VERSION
+	docker build --target=cbtemulator -t fullstorydev/cbtemulator:$(dev_build_version)
+	@rm VERSION
 
 .PHONY: checkgofmt
 checkgofmt:
