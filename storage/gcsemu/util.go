@@ -62,7 +62,7 @@ func mustJson(val interface{}) []byte {
 	return b
 }
 
-// RequestHost returns the host from an http.Request, respecting proxy headers. Works locally with devproxy
+// requestHost returns the host from an http.Request, respecting proxy headers. Works locally with devproxy
 // and gulp proxies as well as in AppEngine (both real GAE and the dev_appserver).
 func requestHost(req *http.Request) string {
 	// proxies like gulp are supposed to accumulate original host, next-step-host, etc in order from
@@ -109,7 +109,7 @@ func removeDoubleQuotes(s string) string {
 	return strings.TrimSuffix(strings.TrimPrefix(s, `"`), `"`)
 }
 
-// TODO(nishanth): This currently only supports the forwarded.Host field.
+// Note: this currently only supports the forwarded.Host field.
 func parseForwardedHeader(s string) forwarded {
 	var f forwarded
 

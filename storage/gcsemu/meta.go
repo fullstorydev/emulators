@@ -58,25 +58,26 @@ func scrubMeta(meta *storage.Object) {
 
 // Return the URL for a bucket.
 func bucketUrl(baseUrl httpBaseUrl, bucket string) string {
-	if baseUrl == dontNeedUrls || baseUrl == "https://storage.googleapis.com/" {
-		baseUrl = "https://www.googleapis.com/"
-	} else if baseUrl == "http://storage.googleapis.com/" {
-		baseUrl = "http://www.googleapis.com/"
-	}
-	return fmt.Sprintf("%sstorage/v1/b/%s", baseUrl, bucket)
+	return fmt.Sprintf("%sstorage/v1/b/%s", normalizeBaseUrl(baseUrl), bucket)
 }
 
 // Return the URL for a file.
 func objectUrl(baseUrl httpBaseUrl, bucket string, filepath string) string {
-	if baseUrl == dontNeedUrls || baseUrl == "https://storage.googleapis.com/" {
-		baseUrl = "https://www.googleapis.com/"
-	} else if baseUrl == "http://storage.googleapis.com/" {
-		baseUrl = "http://www.googleapis.com/"
-	}
-	return fmt.Sprintf("%sstorage/v1/b/%s/o/%s", baseUrl, bucket, filepath)
+	return fmt.Sprintf("%sstorage/v1/b/%s/o/%s", normalizeBaseUrl(baseUrl), bucket, filepath)
 }
 
-// emulator base baseUrl, including trailing slash; e.g. https://www.googleapis.com/
+// emulator base URL, including trailing slash; e.g. https://www.googleapis.com/
 type httpBaseUrl string
 
+// when the caller doesn't really care about the object meta URLs
 const dontNeedUrls = httpBaseUrl("")
+
+func normalizeBaseUrl(baseUrl httpBaseUrl) httpBaseUrl {
+	if baseUrl == dontNeedUrls || baseUrl == "https://storage.googleapis.com/" {
+		return "https://www.googleapis.com/"
+	} else if baseUrl == "http://storage.googleapis.com/" {
+		return "http://www.googleapis.com/"
+	} else {
+		return baseUrl
+	}
+}
