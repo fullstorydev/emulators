@@ -73,6 +73,19 @@ func lockName(bucket string, filename string) string {
 
 // Handles emulated GCS requests for "storage.googleapis.com".
 func (g *GcsEmu) Handler(w http.ResponseWriter, r *http.Request) {
+	baseUrl := dontNeedUrls
+	{
+		host := requestHost(r)
+		if host != "" {
+			// Prepend the proto.
+			if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+				baseUrl = httpBaseUrl("https://" + host + "/")
+			} else {
+				baseUrl = httpBaseUrl("http://" + host + "/")
+			}
+		}
+	}
+
 	ctx := r.Context()
 	defer func() {
 		// Always drain and close the request body to properly free up the connection.
@@ -114,16 +127,16 @@ func (g *GcsEmu) Handler(w http.ResponseWriter, r *http.Request) {
 	case "GET":
 		if object == "" {
 			if strings.HasSuffix(r.URL.Path, "/o") {
-				g.handleGcsListBucket(ctx, w, r.URL.Query(), bucket)
+				g.handleGcsListBucket(ctx, baseUrl, w, r.URL.Query(), bucket)
 			} else {
-				g.handleGcsMetadataRequest(w, bucket, object)
+				g.handleGcsMetadataRequest(baseUrl, w, bucket, object)
 			}
 		} else {
 			alt := r.URL.Query().Get("alt")
 			if alt == "media" || (p.IsPublic && alt == "") {
-				g.handleGcsMediaRequest(w, r.Header.Get("Accept-Encoding"), bucket, object)
+				g.handleGcsMediaRequest(baseUrl, w, r.Header.Get("Accept-Encoding"), bucket, object)
 			} else if alt == "json" || (!p.IsPublic && alt == "") {
-				g.handleGcsMetadataRequest(w, bucket, object)
+				g.handleGcsMetadataRequest(baseUrl, w, bucket, object)
 			} else {
 				// should never happen?
 				g.gapiError(w, http.StatusBadRequest, fmt.Sprintf("unsupported value for alt param to GET: %q\n%s", alt, maybeNotImplementedErrorMsg))
@@ -132,7 +145,7 @@ func (g *GcsEmu) Handler(w http.ResponseWriter, r *http.Request) {
 	case "PATCH":
 		alt := r.URL.Query().Get("alt")
 		if alt == "json" {
-			g.handleGcsUpdateMetadataRequest(ctx, w, r, bucket, object, conds)
+			g.handleGcsUpdateMetadataRequest(ctx, baseUrl, w, r, bucket, object, conds)
 		} else {
 			// should never happen?
 			g.gapiError(w, http.StatusBadRequest, fmt.Sprintf("unsupported value for alt param to PATCH: %q\n%s", alt, maybeNotImplementedErrorMsg))
@@ -141,14 +154,14 @@ func (g *GcsEmu) Handler(w http.ResponseWriter, r *http.Request) {
 		if bucket == "" && r.URL.Query().Get("alt") == "json" {
 			g.handleGcsNewBucket(ctx, w, r, conds)
 		} else if object == "" {
-			g.handleGcsNewObject(ctx, w, r, bucket, conds)
+			g.handleGcsNewObject(ctx, baseUrl, w, r, bucket, conds)
 		} else if strings.Contains(object, "/compose") {
 			// TODO: enforce other conditions outside of generation
-			g.handleGcsCompose(ctx, w, r, bucket, object, conds)
+			g.handleGcsCompose(ctx, baseUrl, w, r, bucket, object, conds)
 		} else if strings.Contains(object, "/rewriteTo/") {
-			g.handleGcsCopy(ctx, w, bucket, object)
+			g.handleGcsCopy(ctx, baseUrl, w, bucket, object)
 		} else if r.Form.Get("upload_id") != "" {
-			g.handleGcsNewObjectResume(ctx, w, r, r.Form.Get("upload_id"))
+			g.handleGcsNewObjectResume(ctx, baseUrl, w, r, r.Form.Get("upload_id"))
 		} else {
 			// unsupported method, or maybe should never happen
 			g.gapiError(w, http.StatusBadRequest, fmt.Sprintf("unsupported POST request: %v\n%s", r.URL, maybeNotImplementedErrorMsg))
@@ -158,7 +171,7 @@ func (g *GcsEmu) Handler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (g *GcsEmu) handleGcsCompose(ctx context.Context, w http.ResponseWriter, r *http.Request, bucket, object string, conds cloudstorage.Conditions) {
+func (g *GcsEmu) handleGcsCompose(ctx context.Context, baseUrl httpBaseUrl, w http.ResponseWriter, r *http.Request, bucket, object string, conds cloudstorage.Conditions) {
 	var req storage.ComposeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		g.gapiError(w, http.StatusBadRequest, "bad compose request")
@@ -191,7 +204,7 @@ func (g *GcsEmu) handleGcsCompose(ctx context.Context, w http.ResponseWriter, r 
 	var obj *storage.Object
 	if err := g.locks.Run(ctx, lockName(bucket, dst.filename), func(_ context.Context) error {
 		var err error
-		obj, err = g.finishCompose(bucket, dst, srcs, req.Destination)
+		obj, err = g.finishCompose(baseUrl, bucket, dst, srcs, req.Destination)
 		return err
 	}); err != nil {
 		g.gapiError(w, httpStatusCodeOf(err), fmt.Sprintf("failed to compose objects: %s", err))
@@ -200,7 +213,7 @@ func (g *GcsEmu) handleGcsCompose(ctx context.Context, w http.ResponseWriter, r 
 	g.jsonRespond(w, &obj)
 }
 
-func (g *GcsEmu) handleGcsListBucket(ctx context.Context, w http.ResponseWriter, params url.Values, bucket string) {
+func (g *GcsEmu) handleGcsListBucket(ctx context.Context, baseUrl httpBaseUrl, w http.ResponseWriter, params url.Values, bucket string) {
 	delimiter := params.Get("delimiter")
 	prefix := params.Get("prefix")
 	pageToken := params.Get("pageToken")
@@ -226,13 +239,13 @@ func (g *GcsEmu) handleGcsListBucket(ctx context.Context, w http.ResponseWriter,
 		}
 	}
 
-	g.makeBucketListResults(ctx, w, delimiter, cursor, prefix, bucket, maxResults)
+	g.makeBucketListResults(ctx, baseUrl, w, delimiter, cursor, prefix, bucket, maxResults)
 }
 
 func (g *GcsEmu) handleGcsDelete(ctx context.Context, w http.ResponseWriter, bucket string, filename string, conds cloudstorage.Conditions) {
 	err := g.locks.Run(ctx, lockName(bucket, filename), func(ctx context.Context) error {
 		// Find the existing file / meta.
-		obj, err := g.store.GetMeta(bucket, filename)
+		obj, err := g.store.GetMeta(dontNeedUrls, bucket, filename)
 		if err != nil {
 			return fmt.Errorf("failed to check existence of %s/%s: %w", bucket, filename, err)
 		}
@@ -259,8 +272,8 @@ func (g *GcsEmu) handleGcsDelete(ctx context.Context, w http.ResponseWriter, buc
 	w.WriteHeader(http.StatusOK)
 }
 
-func (g *GcsEmu) handleGcsMediaRequest(w http.ResponseWriter, acceptEncoding, bucket, filename string) {
-	obj, contents, err := g.store.Get(bucket, filename)
+func (g *GcsEmu) handleGcsMediaRequest(baseUrl httpBaseUrl, w http.ResponseWriter, acceptEncoding, bucket, filename string) {
+	obj, contents, err := g.store.Get(baseUrl, bucket, filename)
 	if err != nil {
 		g.gapiError(w, http.StatusInternalServerError, fmt.Sprintf("failed to check existence of %s/%s: %s", bucket, filename, err))
 		return
@@ -302,18 +315,18 @@ func (g *GcsEmu) handleGcsMediaRequest(w http.ResponseWriter, acceptEncoding, bu
 	}
 }
 
-func (g *GcsEmu) handleGcsMetadataRequest(w http.ResponseWriter, bucket string, filename string) {
+func (g *GcsEmu) handleGcsMetadataRequest(baseUrl httpBaseUrl, w http.ResponseWriter, bucket string, filename string) {
 	var obj interface{}
 	var err error
 	if filename == "" {
 		var b *storage.Bucket
-		b, err = g.store.GetBucketMeta(bucket)
+		b, err = g.store.GetBucketMeta(baseUrl, bucket)
 		if b != nil {
 			obj = b
 		}
 	} else {
 		var o *storage.Object
-		o, err = g.store.GetMeta(bucket, filename)
+		o, err = g.store.GetMeta(baseUrl, bucket, filename)
 		if o != nil {
 			obj = o
 		}
@@ -330,12 +343,12 @@ func (g *GcsEmu) handleGcsMetadataRequest(w http.ResponseWriter, bucket string, 
 	g.jsonRespond(w, obj)
 }
 
-func (g *GcsEmu) handleGcsUpdateMetadataRequest(ctx context.Context, w http.ResponseWriter, r *http.Request, bucket, filename string, conds cloudstorage.Conditions) {
+func (g *GcsEmu) handleGcsUpdateMetadataRequest(ctx context.Context, baseUrl httpBaseUrl, w http.ResponseWriter, r *http.Request, bucket, filename string, conds cloudstorage.Conditions) {
 	var obj *storage.Object
 	err := g.locks.Run(ctx, lockName(bucket, filename), func(ctx context.Context) error {
 		// Find the existing file / meta.
 		var err error
-		obj, err = g.store.GetMeta(bucket, filename)
+		obj, err = g.store.GetMeta(baseUrl, bucket, filename)
 		if err != nil {
 			return fmt.Errorf("failed to check existence of %s/%s: %w", bucket, filename, err)
 		}
@@ -372,7 +385,7 @@ func (g *GcsEmu) handleGcsUpdateMetadataRequest(ctx context.Context, w http.Resp
 	}
 
 	// Respond with the updated metadata.
-	obj, err = g.store.GetMeta(bucket, filename)
+	obj, err = g.store.GetMeta(baseUrl, bucket, filename)
 	if err != nil {
 		g.gapiError(w, http.StatusInternalServerError, fmt.Sprintf("failed to get meta for %s/%s: %s", bucket, filename, err))
 		return
@@ -380,7 +393,7 @@ func (g *GcsEmu) handleGcsUpdateMetadataRequest(ctx context.Context, w http.Resp
 	g.jsonRespond(w, obj)
 }
 
-func (g *GcsEmu) handleGcsCopy(ctx context.Context, w http.ResponseWriter, b1 string, objectPaths string) {
+func (g *GcsEmu) handleGcsCopy(ctx context.Context, baseUrl httpBaseUrl, w http.ResponseWriter, b1 string, objectPaths string) {
 	// TODO(dk): this operation supports conditionals and metadata rewriting, but the emulator implementation currently does not.
 	// See https://cloud.google.com/storage/docs/json_api/v1/objects/rewrite
 	parts := strings.Split(objectPaths, "/rewriteTo/b/")
@@ -401,9 +414,14 @@ func (g *GcsEmu) handleGcsCopy(ctx context.Context, w http.ResponseWriter, b1 st
 	// Must lock the destination object.
 	var obj *storage.Object
 	err := g.locks.Run(ctx, lockName(b2, f2), func(ctx context.Context) error {
-		var err error
-		obj, err = g.store.Copy(b1, f1, b2, f2)
-		return err
+		if ok, err := g.store.Copy(b1, f1, b2, f2); err != nil {
+			return err
+		} else if !ok {
+			return nil // file missing
+		} else {
+			obj, err = g.store.GetMeta(baseUrl, b2, f2)
+			return err
+		}
 	})
 	if err != nil {
 		g.gapiError(w, httpStatusCodeOf(err), fmt.Sprintf("failed to copy: %s", err))
@@ -455,7 +473,7 @@ func (g *GcsEmu) handleGcsNewBucket(ctx context.Context, w http.ResponseWriter, 
 	g.jsonRespond(w, bucket)
 }
 
-func (g *GcsEmu) handleGcsNewObject(ctx context.Context, w http.ResponseWriter, r *http.Request, bucket string, conds cloudstorage.Conditions) {
+func (g *GcsEmu) handleGcsNewObject(ctx context.Context, baseUrl httpBaseUrl, w http.ResponseWriter, r *http.Request, bucket string, conds cloudstorage.Conditions) {
 	switch r.Form.Get("uploadType") {
 	case "simple":
 		// TODO
@@ -476,7 +494,7 @@ func (g *GcsEmu) handleGcsNewObject(ctx context.Context, w http.ResponseWriter, 
 			Conds:  conds,
 		})
 
-		w.Header().Set("Location", objectUrl(bucket, obj.Name)+"?upload_id="+id)
+		w.Header().Set("Location", objectUrl(baseUrl, bucket, obj.Name)+"?upload_id="+id)
 		w.Header().Set("Content-Type", obj.ContentType)
 		w.WriteHeader(http.StatusCreated)
 		return
@@ -491,7 +509,7 @@ func (g *GcsEmu) handleGcsNewObject(ctx context.Context, w http.ResponseWriter, 
 		return
 	}
 
-	meta, err := g.finishUpload(ctx, obj, contents, bucket, conds)
+	meta, err := g.finishUpload(ctx, baseUrl, obj, contents, bucket, conds)
 	if err != nil {
 		g.gapiError(w, httpStatusCodeOf(err), err.Error())
 		return
@@ -502,7 +520,7 @@ func (g *GcsEmu) handleGcsNewObject(ctx context.Context, w http.ResponseWriter, 
 	g.jsonRespond(w, meta)
 }
 
-func (g *GcsEmu) handleGcsNewObjectResume(ctx context.Context, w http.ResponseWriter, r *http.Request, id string) {
+func (g *GcsEmu) handleGcsNewObjectResume(ctx context.Context, baseUrl httpBaseUrl, w http.ResponseWriter, r *http.Request, id string) {
 	found, err := g.uploadIds.GetIFPresent(id)
 	if err != nil {
 		g.gapiError(w, http.StatusInternalServerError, fmt.Sprintf("unexpected error: %s", err))
@@ -565,7 +583,7 @@ func (g *GcsEmu) handleGcsNewObjectResume(ctx context.Context, w http.ResponseWr
 	}
 
 	// Done
-	meta, err := g.finishUpload(ctx, &u.Object, u.data, u.Object.Bucket, u.Conds)
+	meta, err := g.finishUpload(ctx, baseUrl, &u.Object, u.data, u.Object.Bucket, u.Conds)
 	if err != nil {
 		g.gapiError(w, httpStatusCodeOf(err), err.Error())
 		return
@@ -577,7 +595,7 @@ func (g *GcsEmu) handleGcsNewObjectResume(ctx context.Context, w http.ResponseWr
 	g.jsonRespond(w, meta)
 }
 
-func (g *GcsEmu) finishUpload(ctx context.Context, obj *storage.Object, contents []byte, bucket string, conds cloudstorage.Conditions) (*storage.Object, error) {
+func (g *GcsEmu) finishUpload(ctx context.Context, baseUrl httpBaseUrl, obj *storage.Object, contents []byte, bucket string, conds cloudstorage.Conditions) (*storage.Object, error) {
 	filename := obj.Name
 	bHash := md5.Sum(contents)
 	contentHash := bHash[:]
@@ -595,7 +613,7 @@ func (g *GcsEmu) finishUpload(ctx context.Context, obj *storage.Object, contents
 
 	err := g.locks.Run(ctx, lockName(bucket, filename), func(ctx context.Context) error {
 		// Find the existing file / meta.
-		existing, err := g.store.GetMeta(bucket, filename)
+		existing, err := g.store.GetMeta(baseUrl, bucket, filename)
 		if err != nil {
 			return fmt.Errorf("failed to check existence of %s/%s: %w", bucket, filename, err)
 		}
@@ -619,7 +637,7 @@ func (g *GcsEmu) finishUpload(ctx context.Context, obj *storage.Object, contents
 	}
 
 	// respond with object metadata
-	meta, err := g.store.GetMeta(bucket, filename)
+	meta, err := g.store.GetMeta(baseUrl, bucket, filename)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get meta for %s/%s: %w", bucket, filename, err)
 	}
@@ -718,7 +736,7 @@ const (
 	gcsMaxComposeSources = 32
 )
 
-func (g *GcsEmu) finishCompose(bucket string, dst composeObj, srcs []composeObj, meta *storage.Object) (*storage.Object, error) {
+func (g *GcsEmu) finishCompose(baseUrl httpBaseUrl, bucket string, dst composeObj, srcs []composeObj, meta *storage.Object) (*storage.Object, error) {
 	if len(srcs) > gcsMaxComposeSources {
 		return nil, fmtErrorfCode(http.StatusBadRequest, "too many sources")
 	}
@@ -727,7 +745,7 @@ func (g *GcsEmu) finishCompose(bucket string, dst composeObj, srcs []composeObj,
 	var data []byte
 	metas := make([]*storage.Object, len(srcs))
 	for i, src := range srcs {
-		meta, contents, err := g.store.Get(bucket, src.filename)
+		meta, contents, err := g.store.Get(baseUrl, bucket, src.filename)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get object %s: %w", src.filename, err)
 		}
@@ -747,7 +765,7 @@ func (g *GcsEmu) finishCompose(bucket string, dst composeObj, srcs []composeObj,
 	// composite objects do not have an MD5 hash (https://cloud.google.com/storage/docs/composite-objects)
 	meta.Md5Hash = ""
 
-	dstMeta, err := g.store.GetMeta(bucket, dst.filename)
+	dstMeta, err := g.store.GetMeta(baseUrl, bucket, dst.filename)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get object %s: %w", dst.filename, err)
 	}
@@ -760,7 +778,7 @@ func (g *GcsEmu) finishCompose(bucket string, dst composeObj, srcs []composeObj,
 	if err := g.store.Add(bucket, dst.filename, data, meta); err != nil {
 		return nil, fmt.Errorf("failed to add new file: %w", err)
 	}
-	return g.store.GetMeta(bucket, dst.filename)
+	return g.store.GetMeta(baseUrl, bucket, dst.filename)
 }
 
 // InitBucket creates the given bucket directly.

@@ -59,16 +59,16 @@ func (ms *memstore) CreateBucket(bucket string) error {
 	return nil
 }
 
-func (ms *memstore) GetBucketMeta(bucket string) (*storage.Bucket, error) {
+func (ms *memstore) GetBucketMeta(baseUrl httpBaseUrl, bucket string) (*storage.Bucket, error) {
 	if b := ms.getBucket(bucket); b != nil {
-		obj := bucketMeta(bucket)
+		obj := bucketMeta(baseUrl, bucket)
 		obj.Updated = b.created.UTC().Format(time.RFC3339Nano)
 		return obj, nil
 	}
 	return nil, nil
 }
 
-func (ms *memstore) Get(bucket string, filename string) (*storage.Object, []byte, error) {
+func (ms *memstore) Get(baseUrl httpBaseUrl, bucket string, filename string) (*storage.Object, []byte, error) {
 	f := ms.find(bucket, filename)
 	if f != nil {
 		return &f.meta, f.data, nil
@@ -76,11 +76,11 @@ func (ms *memstore) Get(bucket string, filename string) (*storage.Object, []byte
 	return nil, nil, nil
 }
 
-func (ms *memstore) GetMeta(bucket string, filename string) (*storage.Object, error) {
+func (ms *memstore) GetMeta(baseUrl httpBaseUrl, bucket string, filename string) (*storage.Object, error) {
 	f := ms.find(bucket, filename)
 	if f != nil {
 		meta := f.meta
-		initMeta(&meta, bucket, filename, uint64(len(f.data)))
+		initMetaWithUrls(baseUrl, &meta, bucket, filename, uint64(len(f.data)))
 		return &meta, nil
 	}
 	return nil, nil
@@ -89,8 +89,7 @@ func (ms *memstore) GetMeta(bucket string, filename string) (*storage.Object, er
 func (ms *memstore) Add(bucket string, filename string, contents []byte, meta *storage.Object) error {
 	_ = ms.CreateBucket(bucket)
 
-	initMeta(meta, bucket, filename, uint64(len(contents)))
-	scrubMeta(meta)
+	initScrubbedMeta(meta, filename)
 	meta.Metageneration = 1
 
 	// Cannot be overridden by caller
@@ -117,8 +116,7 @@ func (ms *memstore) UpdateMeta(bucket string, filename string, meta *storage.Obj
 		return os.ErrNotExist
 	}
 
-	initMeta(meta, bucket, filename, 0)
-	scrubMeta(meta)
+	initScrubbedMeta(meta, filename)
 	meta.Metageneration = metagen
 
 	b := ms.getBucket(bucket)
@@ -131,10 +129,10 @@ func (ms *memstore) UpdateMeta(bucket string, filename string, meta *storage.Obj
 	return nil
 }
 
-func (ms *memstore) Copy(srcBucket string, srcFile string, dstBucket string, dstFile string) (*storage.Object, error) {
+func (ms *memstore) Copy(srcBucket string, srcFile string, dstBucket string, dstFile string) (bool, error) {
 	src := ms.find(srcBucket, srcFile)
 	if src == nil {
-		return nil, nil
+		return false, nil
 	}
 
 	// Copy with metadata
@@ -142,11 +140,10 @@ func (ms *memstore) Copy(srcBucket string, srcFile string, dstBucket string, dst
 	meta.TimeCreated = "" // reset creation time on the dest file
 	err := ms.Add(dstBucket, dstFile, src.data, &meta)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 
-	// Reread the updated metadata and return it.
-	return ms.GetMeta(dstBucket, dstFile)
+	return true, nil
 }
 
 func (ms *memstore) Delete(bucket string, filename string) error {
@@ -163,8 +160,8 @@ func (ms *memstore) Delete(bucket string, filename string) error {
 	return nil
 }
 
-func (ms *memstore) ReadMeta(bucket string, filename string, _ os.FileInfo) (*storage.Object, error) {
-	return ms.GetMeta(bucket, filename)
+func (ms *memstore) ReadMeta(baseUrl httpBaseUrl, bucket string, filename string, _ os.FileInfo) (*storage.Object, error) {
+	return ms.GetMeta(baseUrl, bucket, filename)
 }
 
 func (ms *memstore) Walk(ctx context.Context, bucket string, cb func(ctx context.Context, filename string, fInfo os.FileInfo) error) error {

@@ -14,7 +14,7 @@ import (
 )
 
 // Iterate over the file system to serve a GCS list-bucket request.
-func (g *GcsEmu) makeBucketListResults(ctx context.Context, w http.ResponseWriter, delimiter string, cursor string, prefix string, bucket string, maxResults int) {
+func (g *GcsEmu) makeBucketListResults(ctx context.Context, baseUrl httpBaseUrl, w http.ResponseWriter, delimiter string, cursor string, prefix string, bucket string, maxResults int) {
 	var errAbort = errors.New("sentinel error to abort walk")
 	const walkVerbose = true
 
@@ -115,7 +115,7 @@ func (g *GcsEmu) makeBucketListResults(ctx context.Context, w http.ResponseWrite
 	// Resolve the found items.
 	var items []*storage.Object
 	for _, item := range found {
-		if obj, err := g.store.ReadMeta(bucket, item.filename, item.fInfo); err != nil {
+		if obj, err := g.store.ReadMeta(baseUrl, bucket, item.filename, item.fInfo); err != nil {
 			// return our partial results + the cursor so that the client can retry from this point
 			g.log(nil, "failed to resolve: %s", item.filename)
 			break
