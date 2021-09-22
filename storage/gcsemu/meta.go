@@ -58,16 +58,20 @@ func scrubMeta(meta *storage.Object) {
 
 // Return the URL for a bucket.
 func bucketUrl(baseUrl httpBaseUrl, bucket string) string {
-	if baseUrl == "" {
+	if baseUrl == dontNeedUrls || baseUrl == "https://storage.googleapis.com/" {
 		baseUrl = "https://www.googleapis.com/"
+	} else if baseUrl == "http://storage.googleapis.com/" {
+		baseUrl = "http://www.googleapis.com/"
 	}
 	return fmt.Sprintf("%sstorage/v1/b/%s", baseUrl, bucket)
 }
 
 // Return the URL for a file.
 func objectUrl(baseUrl httpBaseUrl, bucket string, filepath string) string {
-	if baseUrl == "" {
+	if baseUrl == dontNeedUrls || baseUrl == "https://storage.googleapis.com/" {
 		baseUrl = "https://www.googleapis.com/"
+	} else if baseUrl == "http://storage.googleapis.com/" {
+		baseUrl = "http://www.googleapis.com/"
 	}
 	return fmt.Sprintf("%sstorage/v1/b/%s/o/%s", baseUrl, bucket, filepath)
 }
