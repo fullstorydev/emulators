@@ -39,7 +39,7 @@ func (fs *filestore) CreateBucket(bucket string) error {
 	return os.MkdirAll(bucketDir, 0777)
 }
 
-func (fs *filestore) GetBucketMeta(bucket string) (*storage.Bucket, error) {
+func (fs *filestore) GetBucketMeta(baseUrl httpBaseUrl, bucket string) (*storage.Bucket, error) {
 	f := fs.filename(bucket, "")
 	fInfo, err := os.Stat(f)
 	if err != nil {
@@ -49,13 +49,13 @@ func (fs *filestore) GetBucketMeta(bucket string) (*storage.Bucket, error) {
 		return nil, fmt.Errorf("stating %s: %w", f, err)
 	}
 
-	obj := bucketMeta(bucket)
+	obj := bucketMeta(baseUrl, bucket)
 	obj.Updated = fInfo.ModTime().UTC().Format(time.RFC3339Nano)
 	return obj, nil
 }
 
-func (fs *filestore) Get(bucket string, filename string) (*storage.Object, []byte, error) {
-	obj, err := fs.GetMeta(bucket, filename)
+func (fs *filestore) Get(baseUrl httpBaseUrl, bucket string, filename string) (*storage.Object, []byte, error) {
+	obj, err := fs.GetMeta(baseUrl, bucket, filename)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -71,7 +71,7 @@ func (fs *filestore) Get(bucket string, filename string) (*storage.Object, []byt
 	return obj, contents, nil
 }
 
-func (fs *filestore) GetMeta(bucket string, filename string) (*storage.Object, error) {
+func (fs *filestore) GetMeta(baseUrl httpBaseUrl, bucket string, filename string) (*storage.Object, error) {
 	f := fs.filename(bucket, filename)
 	fInfo, err := os.Stat(f)
 	if err != nil {
@@ -81,7 +81,7 @@ func (fs *filestore) GetMeta(bucket string, filename string) (*storage.Object, e
 		return nil, fmt.Errorf("stating  %s: %w", f, err)
 	}
 
-	return fs.ReadMeta(bucket, filename, fInfo)
+	return fs.ReadMeta(baseUrl, bucket, filename, fInfo)
 }
 
 func (fs *filestore) Add(bucket string, filename string, contents []byte, meta *storage.Object) error {
@@ -98,8 +98,7 @@ func (fs *filestore) Add(bucket string, filename string, contents []byte, meta *
 	now := time.Now().UTC()
 	_ = os.Chtimes(f, now, now)
 
-	initMeta(meta, bucket, filename, uint64(len(contents)))
-	scrubMeta(meta)
+	initScrubbedMeta(meta, filename)
 	meta.Metageneration = 1
 	if meta.TimeCreated == "" {
 		meta.TimeCreated = now.UTC().Format(time.RFC3339Nano)
@@ -114,8 +113,7 @@ func (fs *filestore) Add(bucket string, filename string, contents []byte, meta *
 }
 
 func (fs *filestore) UpdateMeta(bucket string, filename string, meta *storage.Object, metagen int64) error {
-	initMeta(meta, bucket, filename, 0)
-	scrubMeta(meta)
+	initScrubbedMeta(meta, filename)
 	meta.Metageneration = metagen
 
 	fMeta := metaFilename(fs.filename(bucket, filename))
@@ -126,31 +124,30 @@ func (fs *filestore) UpdateMeta(bucket string, filename string, meta *storage.Ob
 	return nil
 }
 
-func (fs *filestore) Copy(srcBucket string, srcFile string, dstBucket string, dstFile string) (*storage.Object, error) {
+func (fs *filestore) Copy(srcBucket string, srcFile string, dstBucket string, dstFile string) (bool, error) {
 	// Make sure it's there
-	meta, err := fs.GetMeta(srcBucket, srcFile)
+	meta, err := fs.GetMeta(dontNeedUrls, srcBucket, srcFile)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 	// Handle object-not-found
 	if meta == nil {
-		return nil, nil
+		return false, nil
 	}
 
 	// Copy with metadata
 	f1 := fs.filename(srcBucket, srcFile)
 	contents, err := ioutil.ReadFile(f1)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 	meta.TimeCreated = "" // reset creation time on the dest file
 	err = fs.Add(dstBucket, dstFile, contents, meta)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 
-	// Reread the updated metadata and return it.
-	return fs.GetMeta(dstBucket, dstFile)
+	return true, nil
 }
 
 func (fs *filestore) Delete(bucket string, filename string) error {
@@ -195,7 +192,7 @@ func (fs *filestore) Delete(bucket string, filename string) error {
 	return nil
 }
 
-func (fs *filestore) ReadMeta(bucket string, filename string, fInfo os.FileInfo) (*storage.Object, error) {
+func (fs *filestore) ReadMeta(baseUrl httpBaseUrl, bucket string, filename string, fInfo os.FileInfo) (*storage.Object, error) {
 	if fInfo.IsDir() {
 		return nil, nil
 	}
@@ -216,7 +213,7 @@ func (fs *filestore) ReadMeta(bucket string, filename string, fInfo os.FileInfo)
 		}
 	}
 
-	initMeta(obj, bucket, filename, uint64(fInfo.Size()))
+	initMetaWithUrls(baseUrl, obj, bucket, filename, uint64(fInfo.Size()))
 	obj.Generation = fInfo.ModTime().UnixNano() // use the mod time as the generation number
 	obj.Updated = fInfo.ModTime().UTC().Format(time.RFC3339Nano)
 	return obj, nil
