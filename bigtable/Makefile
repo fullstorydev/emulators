@@ -23,7 +23,7 @@ release:
 .PHONY: docker
 docker:
 	@echo $(dev_build_version) > VERSION
-	docker build --target=cbtemulator -t fullstorydev/cbtemulator:$(dev_build_version)
+	docker build --target=cbtemulator -t fullstorydev/cbtemulator:$(dev_build_version) ..
 	@rm VERSION
 
 .PHONY: checkgofmt

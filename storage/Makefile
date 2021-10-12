@@ -23,7 +23,7 @@ release:
 .PHONY: docker
 docker:
 	@echo $(dev_build_version) > VERSION
-	docker build --target=gcsemulator -t fullstorydev/gcsemulator:$(dev_build_version)
+	docker build --target=gcsemulator -t fullstorydev/gcsemulator:$(dev_build_version) ..
 	@rm VERSION
 
 .PHONY: checkgofmt

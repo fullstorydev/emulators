@@ -1,4 +1,4 @@
-FROM golang:1.13-alpine As builder
+FROM golang:1.15-alpine As builder
 MAINTAINER FullStory Engineering
 
 # create non-privileged group and user
@@ -6,8 +6,6 @@ RUN addgroup -S emulators && adduser -S emulators -G emulators
 RUN mkdir -p /data
 
 ENV CGO_ENABLED=0
-ENV GOOS=linux
-ENV GOARCH=amd64
 ENV GO111MODULE=on
 
 WORKDIR /tmp/fullstorydev/bigtable
