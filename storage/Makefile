@@ -5,7 +5,6 @@ ci: deps checkgofmt vet staticcheck ineffassign predeclared test
 
 .PHONY: deps
 deps:
-	$(MAKE) -C ../tools
 	go get -d -v -t ./...
 
 .PHONY: updatedeps
@@ -18,6 +17,7 @@ install:
 
 .PHONY: release
 release:
+	@go install github.com/goreleaser/goreleaser@v0.134.0
 	goreleaser --rm-dist
 
 .PHONY: docker
@@ -37,28 +37,33 @@ checkgofmt:
 vet:
 	go vet ./...
 
-# This all works fine with Go modules, but without modules,
-# CI is just getting latest master for dependencies like grpc.
 .PHONY: staticcheck
 staticcheck:
+	@go install honnef.co/go/tools/cmd/staticcheck@v0.0.1-2020.1.4
 	staticcheck ./...
 
 .PHONY: ineffassign
 ineffassign:
-	ineffassign ./...
+	@go install github.com/gordonklaus/ineffassign@7953dde2c7bf
+	ineffassign .
 
 .PHONY: predeclared
 predeclared:
+	@go install github.com/nishanths/predeclared@86fad755b4d3
 	predeclared ./...
 
 # Intentionally omitted from CI, but target here for ad-hoc reports.
 .PHONY: golint
 golint:
+	# TODO: pin version
+	@go install golang.org/x/lint/golint@latest
 	golint -min_confidence 0.9 -set_exit_status ./...
 
 # Intentionally omitted from CI, but target here for ad-hoc reports.
 .PHONY: errcheck
 errcheck:
+	# TODO: pin version
+	@go install github.com/kisielk/errcheck@latest
 	errcheck ./...
 
 .PHONY: test
