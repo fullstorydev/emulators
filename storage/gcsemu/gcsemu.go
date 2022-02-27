@@ -79,9 +79,9 @@ func (g *GcsEmu) Handler(w http.ResponseWriter, r *http.Request) {
 		if host != "" {
 			// Prepend the proto.
 			if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
-				baseUrl = httpBaseUrl("https://" + host + "/")
+				baseUrl = HttpBaseUrl("https://" + host + "/")
 			} else {
-				baseUrl = httpBaseUrl("http://" + host + "/")
+				baseUrl = HttpBaseUrl("http://" + host + "/")
 			}
 		}
 	}
@@ -171,7 +171,7 @@ func (g *GcsEmu) Handler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (g *GcsEmu) handleGcsCompose(ctx context.Context, baseUrl httpBaseUrl, w http.ResponseWriter, r *http.Request, bucket, object string, conds cloudstorage.Conditions) {
+func (g *GcsEmu) handleGcsCompose(ctx context.Context, baseUrl HttpBaseUrl, w http.ResponseWriter, r *http.Request, bucket, object string, conds cloudstorage.Conditions) {
 	var req storage.ComposeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		g.gapiError(w, http.StatusBadRequest, "bad compose request")
@@ -213,7 +213,7 @@ func (g *GcsEmu) handleGcsCompose(ctx context.Context, baseUrl httpBaseUrl, w ht
 	g.jsonRespond(w, &obj)
 }
 
-func (g *GcsEmu) handleGcsListBucket(ctx context.Context, baseUrl httpBaseUrl, w http.ResponseWriter, params url.Values, bucket string) {
+func (g *GcsEmu) handleGcsListBucket(ctx context.Context, baseUrl HttpBaseUrl, w http.ResponseWriter, params url.Values, bucket string) {
 	delimiter := params.Get("delimiter")
 	prefix := params.Get("prefix")
 	pageToken := params.Get("pageToken")
@@ -272,7 +272,7 @@ func (g *GcsEmu) handleGcsDelete(ctx context.Context, w http.ResponseWriter, buc
 	w.WriteHeader(http.StatusOK)
 }
 
-func (g *GcsEmu) handleGcsMediaRequest(baseUrl httpBaseUrl, w http.ResponseWriter, acceptEncoding, bucket, filename string) {
+func (g *GcsEmu) handleGcsMediaRequest(baseUrl HttpBaseUrl, w http.ResponseWriter, acceptEncoding, bucket, filename string) {
 	obj, contents, err := g.store.Get(baseUrl, bucket, filename)
 	if err != nil {
 		g.gapiError(w, http.StatusInternalServerError, fmt.Sprintf("failed to check existence of %s/%s: %s", bucket, filename, err))
@@ -315,7 +315,7 @@ func (g *GcsEmu) handleGcsMediaRequest(baseUrl httpBaseUrl, w http.ResponseWrite
 	}
 }
 
-func (g *GcsEmu) handleGcsMetadataRequest(baseUrl httpBaseUrl, w http.ResponseWriter, bucket string, filename string) {
+func (g *GcsEmu) handleGcsMetadataRequest(baseUrl HttpBaseUrl, w http.ResponseWriter, bucket string, filename string) {
 	var obj interface{}
 	var err error
 	if filename == "" {
@@ -343,7 +343,7 @@ func (g *GcsEmu) handleGcsMetadataRequest(baseUrl httpBaseUrl, w http.ResponseWr
 	g.jsonRespond(w, obj)
 }
 
-func (g *GcsEmu) handleGcsUpdateMetadataRequest(ctx context.Context, baseUrl httpBaseUrl, w http.ResponseWriter, r *http.Request, bucket, filename string, conds cloudstorage.Conditions) {
+func (g *GcsEmu) handleGcsUpdateMetadataRequest(ctx context.Context, baseUrl HttpBaseUrl, w http.ResponseWriter, r *http.Request, bucket, filename string, conds cloudstorage.Conditions) {
 	var obj *storage.Object
 	err := g.locks.Run(ctx, lockName(bucket, filename), func(ctx context.Context) error {
 		// Find the existing file / meta.
@@ -393,7 +393,7 @@ func (g *GcsEmu) handleGcsUpdateMetadataRequest(ctx context.Context, baseUrl htt
 	g.jsonRespond(w, obj)
 }
 
-func (g *GcsEmu) handleGcsCopy(ctx context.Context, baseUrl httpBaseUrl, w http.ResponseWriter, b1 string, objectPaths string) {
+func (g *GcsEmu) handleGcsCopy(ctx context.Context, baseUrl HttpBaseUrl, w http.ResponseWriter, b1 string, objectPaths string) {
 	// TODO(dk): this operation supports conditionals and metadata rewriting, but the emulator implementation currently does not.
 	// See https://cloud.google.com/storage/docs/json_api/v1/objects/rewrite
 	parts := strings.Split(objectPaths, "/rewriteTo/b/")
@@ -473,7 +473,7 @@ func (g *GcsEmu) handleGcsNewBucket(ctx context.Context, w http.ResponseWriter, 
 	g.jsonRespond(w, bucket)
 }
 
-func (g *GcsEmu) handleGcsNewObject(ctx context.Context, baseUrl httpBaseUrl, w http.ResponseWriter, r *http.Request, bucket string, conds cloudstorage.Conditions) {
+func (g *GcsEmu) handleGcsNewObject(ctx context.Context, baseUrl HttpBaseUrl, w http.ResponseWriter, r *http.Request, bucket string, conds cloudstorage.Conditions) {
 	switch r.Form.Get("uploadType") {
 	case "simple":
 		// TODO
@@ -494,7 +494,7 @@ func (g *GcsEmu) handleGcsNewObject(ctx context.Context, baseUrl httpBaseUrl, w 
 			Conds:  conds,
 		})
 
-		w.Header().Set("Location", objectUrl(baseUrl, bucket, obj.Name)+"?upload_id="+id)
+		w.Header().Set("Location", ObjectUrl(baseUrl, bucket, obj.Name)+"?upload_id="+id)
 		w.Header().Set("Content-Type", obj.ContentType)
 		w.WriteHeader(http.StatusCreated)
 		return
@@ -520,7 +520,7 @@ func (g *GcsEmu) handleGcsNewObject(ctx context.Context, baseUrl httpBaseUrl, w 
 	g.jsonRespond(w, meta)
 }
 
-func (g *GcsEmu) handleGcsNewObjectResume(ctx context.Context, baseUrl httpBaseUrl, w http.ResponseWriter, r *http.Request, id string) {
+func (g *GcsEmu) handleGcsNewObjectResume(ctx context.Context, baseUrl HttpBaseUrl, w http.ResponseWriter, r *http.Request, id string) {
 	found, err := g.uploadIds.GetIFPresent(id)
 	if err != nil {
 		g.gapiError(w, http.StatusInternalServerError, fmt.Sprintf("unexpected error: %s", err))
@@ -595,7 +595,7 @@ func (g *GcsEmu) handleGcsNewObjectResume(ctx context.Context, baseUrl httpBaseU
 	g.jsonRespond(w, meta)
 }
 
-func (g *GcsEmu) finishUpload(ctx context.Context, baseUrl httpBaseUrl, obj *storage.Object, contents []byte, bucket string, conds cloudstorage.Conditions) (*storage.Object, error) {
+func (g *GcsEmu) finishUpload(ctx context.Context, baseUrl HttpBaseUrl, obj *storage.Object, contents []byte, bucket string, conds cloudstorage.Conditions) (*storage.Object, error) {
 	filename := obj.Name
 	bHash := md5.Sum(contents)
 	contentHash := bHash[:]
@@ -736,7 +736,7 @@ const (
 	gcsMaxComposeSources = 32
 )
 
-func (g *GcsEmu) finishCompose(baseUrl httpBaseUrl, bucket string, dst composeObj, srcs []composeObj, meta *storage.Object) (*storage.Object, error) {
+func (g *GcsEmu) finishCompose(baseUrl HttpBaseUrl, bucket string, dst composeObj, srcs []composeObj, meta *storage.Object) (*storage.Object, error) {
 	if len(srcs) > gcsMaxComposeSources {
 		return nil, fmtErrorfCode(http.StatusBadRequest, "too many sources")
 	}

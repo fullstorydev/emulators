@@ -14,7 +14,7 @@ import (
 )
 
 // Iterate over the file system to serve a GCS list-bucket request.
-func (g *GcsEmu) makeBucketListResults(ctx context.Context, baseUrl httpBaseUrl, w http.ResponseWriter, delimiter string, cursor string, prefix string, bucket string, maxResults int) {
+func (g *GcsEmu) makeBucketListResults(ctx context.Context, baseUrl HttpBaseUrl, w http.ResponseWriter, delimiter string, cursor string, prefix string, bucket string, maxResults int) {
 	var errAbort = errors.New("sentinel error to abort walk")
 	const walkVerbose = true
 

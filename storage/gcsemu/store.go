@@ -13,13 +13,13 @@ type Store interface {
 	CreateBucket(bucket string) error
 
 	// Get returns a bucket's metadata.
-	GetBucketMeta(baseUrl httpBaseUrl, bucket string) (*storage.Bucket, error)
+	GetBucketMeta(baseUrl HttpBaseUrl, bucket string) (*storage.Bucket, error)
 
 	// Get returns a file's contents and metadata.
-	Get(url httpBaseUrl, bucket string, filename string) (*storage.Object, []byte, error)
+	Get(url HttpBaseUrl, bucket string, filename string) (*storage.Object, []byte, error)
 
 	// GetMeta returns a file's metadata.
-	GetMeta(url httpBaseUrl, bucket string, filename string) (*storage.Object, error)
+	GetMeta(url HttpBaseUrl, bucket string, filename string) (*storage.Object, error)
 
 	// Add creates the specified file.
 	Add(bucket string, filename string, contents []byte, meta *storage.Object) error
@@ -34,7 +34,7 @@ type Store interface {
 	Delete(bucket string, filename string) error
 
 	// ReadMeta reads the GCS metadata for a file, when you already have file info.
-	ReadMeta(url httpBaseUrl, bucket string, filename string, fInfo os.FileInfo) (*storage.Object, error)
+	ReadMeta(url HttpBaseUrl, bucket string, filename string, fInfo os.FileInfo) (*storage.Object, error)
 
 	// Walks the given bucket.
 	Walk(ctx context.Context, bucket string, cb func(ctx context.Context, filename string, fInfo os.FileInfo) error) error

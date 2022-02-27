@@ -59,16 +59,16 @@ func (ms *memstore) CreateBucket(bucket string) error {
 	return nil
 }
 
-func (ms *memstore) GetBucketMeta(baseUrl httpBaseUrl, bucket string) (*storage.Bucket, error) {
+func (ms *memstore) GetBucketMeta(baseUrl HttpBaseUrl, bucket string) (*storage.Bucket, error) {
 	if b := ms.getBucket(bucket); b != nil {
-		obj := bucketMeta(baseUrl, bucket)
+		obj := BucketMeta(baseUrl, bucket)
 		obj.Updated = b.created.UTC().Format(time.RFC3339Nano)
 		return obj, nil
 	}
 	return nil, nil
 }
 
-func (ms *memstore) Get(baseUrl httpBaseUrl, bucket string, filename string) (*storage.Object, []byte, error) {
+func (ms *memstore) Get(baseUrl HttpBaseUrl, bucket string, filename string) (*storage.Object, []byte, error) {
 	f := ms.find(bucket, filename)
 	if f != nil {
 		return &f.meta, f.data, nil
@@ -76,11 +76,11 @@ func (ms *memstore) Get(baseUrl httpBaseUrl, bucket string, filename string) (*s
 	return nil, nil, nil
 }
 
-func (ms *memstore) GetMeta(baseUrl httpBaseUrl, bucket string, filename string) (*storage.Object, error) {
+func (ms *memstore) GetMeta(baseUrl HttpBaseUrl, bucket string, filename string) (*storage.Object, error) {
 	f := ms.find(bucket, filename)
 	if f != nil {
 		meta := f.meta
-		initMetaWithUrls(baseUrl, &meta, bucket, filename, uint64(len(f.data)))
+		InitMetaWithUrls(baseUrl, &meta, bucket, filename, uint64(len(f.data)))
 		return &meta, nil
 	}
 	return nil, nil
@@ -89,7 +89,7 @@ func (ms *memstore) GetMeta(baseUrl httpBaseUrl, bucket string, filename string)
 func (ms *memstore) Add(bucket string, filename string, contents []byte, meta *storage.Object) error {
 	_ = ms.CreateBucket(bucket)
 
-	initScrubbedMeta(meta, filename)
+	InitScrubbedMeta(meta, filename)
 	meta.Metageneration = 1
 
 	// Cannot be overridden by caller
@@ -116,7 +116,7 @@ func (ms *memstore) UpdateMeta(bucket string, filename string, meta *storage.Obj
 		return os.ErrNotExist
 	}
 
-	initScrubbedMeta(meta, filename)
+	InitScrubbedMeta(meta, filename)
 	meta.Metageneration = metagen
 
 	b := ms.getBucket(bucket)
@@ -160,7 +160,7 @@ func (ms *memstore) Delete(bucket string, filename string) error {
 	return nil
 }
 
-func (ms *memstore) ReadMeta(baseUrl httpBaseUrl, bucket string, filename string, _ os.FileInfo) (*storage.Object, error) {
+func (ms *memstore) ReadMeta(baseUrl HttpBaseUrl, bucket string, filename string, _ os.FileInfo) (*storage.Object, error) {
 	return ms.GetMeta(baseUrl, bucket, filename)
 }
 

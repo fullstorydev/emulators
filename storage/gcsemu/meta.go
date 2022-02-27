@@ -8,17 +8,18 @@ import (
 	"google.golang.org/api/storage/v1"
 )
 
-func bucketMeta(baseUrl httpBaseUrl, bucket string) *storage.Bucket {
+// BucketMeta returns a default bucket metadata for the given name and base url.
+func BucketMeta(baseUrl HttpBaseUrl, bucket string) *storage.Bucket {
 	return &storage.Bucket{
 		Kind:         "storage#bucket",
 		Name:         bucket,
-		SelfLink:     bucketUrl(baseUrl, bucket),
+		SelfLink:     BucketUrl(baseUrl, bucket),
 		StorageClass: "STANDARD",
 	}
 }
 
-// initScrubbedMeta "bakes" metadata with intrinsic values and removes fields that are intrinsic / computed.
-func initScrubbedMeta(meta *storage.Object, filename string) {
+// InitScrubbedMeta "bakes" metadata with intrinsic values and removes fields that are intrinsic / computed.
+func InitScrubbedMeta(meta *storage.Object, filename string) {
 	parts := strings.Split(filename, ".")
 	ext := parts[len(parts)-1]
 
@@ -26,11 +27,11 @@ func initScrubbedMeta(meta *storage.Object, filename string) {
 		meta.ContentType = mime.TypeByExtension(ext)
 	}
 	meta.Name = filename
-	scrubMeta(meta)
+	ScrubMeta(meta)
 }
 
-// initMetaWithUrls "bakes" metadata with intrinsic values, including computed links.
-func initMetaWithUrls(baseUrl httpBaseUrl, meta *storage.Object, bucket string, filename string, size uint64) {
+// InitMetaWithUrls "bakes" metadata with intrinsic values, including computed links.
+func InitMetaWithUrls(baseUrl HttpBaseUrl, meta *storage.Object, bucket string, filename string, size uint64) {
 	parts := strings.Split(filename, ".")
 	ext := parts[len(parts)-1]
 
@@ -39,15 +40,15 @@ func initMetaWithUrls(baseUrl httpBaseUrl, meta *storage.Object, bucket string, 
 		meta.ContentType = mime.TypeByExtension(ext)
 	}
 	meta.Kind = "storage#object"
-	meta.MediaLink = objectUrl(baseUrl, bucket, filename) + "?alt=media"
+	meta.MediaLink = ObjectUrl(baseUrl, bucket, filename) + "?alt=media"
 	meta.Name = filename
-	meta.SelfLink = objectUrl(baseUrl, bucket, filename)
+	meta.SelfLink = ObjectUrl(baseUrl, bucket, filename)
 	meta.Size = size
 	meta.StorageClass = "STANDARD"
 }
 
-// scrubMeta removes fields that are intrinsic / computed for minimal storage.
-func scrubMeta(meta *storage.Object) {
+// ScrubMeta removes fields that are intrinsic / computed for minimal storage.
+func ScrubMeta(meta *storage.Object) {
 	meta.Bucket = ""
 	meta.Kind = ""
 	meta.MediaLink = ""
@@ -56,23 +57,23 @@ func scrubMeta(meta *storage.Object) {
 	meta.StorageClass = ""
 }
 
-// Return the URL for a bucket.
-func bucketUrl(baseUrl httpBaseUrl, bucket string) string {
+// BucketUrl returns the URL for a bucket.
+func BucketUrl(baseUrl HttpBaseUrl, bucket string) string {
 	return fmt.Sprintf("%sstorage/v1/b/%s", normalizeBaseUrl(baseUrl), bucket)
 }
 
-// Return the URL for a file.
-func objectUrl(baseUrl httpBaseUrl, bucket string, filepath string) string {
+// ObjectUrl returns the URL for a file.
+func ObjectUrl(baseUrl HttpBaseUrl, bucket string, filepath string) string {
 	return fmt.Sprintf("%sstorage/v1/b/%s/o/%s", normalizeBaseUrl(baseUrl), bucket, filepath)
 }
 
-// emulator base URL, including trailing slash; e.g. https://www.googleapis.com/
-type httpBaseUrl string
+// HttpBaseUrl represents the emulator base URL, including trailing slash; e.g. https://www.googleapis.com/
+type HttpBaseUrl string
 
 // when the caller doesn't really care about the object meta URLs
-const dontNeedUrls = httpBaseUrl("")
+const dontNeedUrls = HttpBaseUrl("")
 
-func normalizeBaseUrl(baseUrl httpBaseUrl) httpBaseUrl {
+func normalizeBaseUrl(baseUrl HttpBaseUrl) HttpBaseUrl {
 	if baseUrl == dontNeedUrls || baseUrl == "https://storage.googleapis.com/" {
 		return "https://www.googleapis.com/"
 	} else if baseUrl == "http://storage.googleapis.com/" {
