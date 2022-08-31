@@ -10,15 +10,16 @@ import (
 )
 
 var (
-	host = flag.String("host", "localhost", "the address to bind to on the local machine")
-	port = flag.Int("port", 9000, "the port number to bind to on the local machine")
-	dir  = flag.String("dir", "", "if set, use persistence in the given directory")
+	host    = flag.String("host", "localhost", "the address to bind to on the local machine")
+	port    = flag.Int("port", 9000, "the port number to bind to on the local machine")
+	dir     = flag.String("dir", "", "if set, use persistence in the given directory")
+	verbose = flag.Bool("verbose", true, "log verbosely")
 )
 
 func main() {
 	flag.Parse()
 	opts := gcsemu.Options{
-		Verbose: true,
+		Verbose: *verbose,
 		Log: func(err error, fmt string, args ...interface{}) {
 			if err != nil {
 				fmt = "ERROR: " + fmt + ": %s"
