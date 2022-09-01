@@ -16,7 +16,6 @@ import (
 // Iterate over the file system to serve a GCS list-bucket request.
 func (g *GcsEmu) makeBucketListResults(ctx context.Context, baseUrl HttpBaseUrl, w http.ResponseWriter, delimiter string, cursor string, prefix string, bucket string, maxResults int) {
 	var errAbort = errors.New("sentinel error to abort walk")
-	const walkVerbose = true
 
 	type item struct {
 		filename string
@@ -27,7 +26,7 @@ func (g *GcsEmu) makeBucketListResults(ctx context.Context, baseUrl HttpBaseUrl,
 	seenPrefixes := make(map[string]bool)
 
 	dbgWalk := func(fmt string, args ...interface{}) {
-		if walkVerbose {
+		if g.verbose {
 			g.log(nil, fmt, args...)
 		}
 	}
