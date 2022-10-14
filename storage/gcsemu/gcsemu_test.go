@@ -615,6 +615,16 @@ func testCompose(t *testing.T, bh BucketHandle) {
 	assert.NilError(t, r.Close(), "failed to close composed file reader")
 	assert.Equal(t, manualCompose+source1, string(data), "content doesn't match")
 
+	// enforce compose source limits
+	sourceCount := 33
+	tooManySources := make([]*storage.ObjectHandle, sourceCount)
+	for i := 0; i < sourceCount; i++ {
+		tooManySources[i] = bh.Object(fmt.Sprintf("src-%d", i))
+	}
+	composer = dest.ComposerFrom(tooManySources...)
+	_, err = composer.Run(ctx)
+	assert.Equal(t, http.StatusBadRequest, httpStatusCodeOf(err), "wrong error code returned")
+
 	// Make sure we get a 404 if the source doesn't exist
 	dneObj := bh.Object("dneObject")
 	_ = dneObj.Delete(ctx)

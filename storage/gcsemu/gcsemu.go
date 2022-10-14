@@ -183,6 +183,13 @@ func (g *GcsEmu) handleGcsCompose(ctx context.Context, baseUrl HttpBaseUrl, w ht
 		g.gapiError(w, http.StatusBadRequest, "bad compose request")
 		return
 	}
+	if len(req.SourceObjects) == 0 {
+		g.gapiError(w, http.StatusBadRequest, "no source objects provided")
+		return
+	} else if len(req.SourceObjects) > 32 {
+		g.gapiError(w, http.StatusBadRequest, "too many source objects provided")
+		return
+	}
 	dst := composeObj{
 		filename: parts[0],
 		conds:    conds,
