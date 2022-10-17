@@ -105,10 +105,9 @@ func (g *GcsEmu) makeBucketListResults(ctx context.Context, baseUrl HttpBaseUrl,
 				g.gapiError(w, http.StatusInternalServerError, "failed to iterate: "+err.Error())
 			}
 			return
-		} else {
-			// return our partial results + the cursor so that the client can retry from this point
-			g.log(nil, "failed to iterate")
 		}
+		// return our partial results + the cursor so that the client can retry from this point
+		g.log(nil, "failed to iterate")
 	}
 
 	// Resolve the found items.

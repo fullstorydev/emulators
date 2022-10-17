@@ -19,6 +19,7 @@ Package bttest contains test helpers for working with the bigtable package.
 
 To use a Server, create it, and then connect to it with no security:
 (The project/instance values are ignored.)
+
 	srv, err := bttest.NewServer("localhost:0")
 	...
 	conn, err := grpc.Dial(srv.Addr, grpc.WithInsecure())
@@ -104,6 +105,7 @@ func NewServer(laddr string, opt ...grpc.ServerOption) (*Server, error) {
 	})
 }
 
+// Options to configure the server.
 type Options struct {
 	// A storage layer to use; if nil, defaults to LeveldbMemStorage.
 	Storage Storage

@@ -20,18 +20,22 @@ type BtreeStorage struct {
 
 var _ Storage = BtreeStorage{}
 
+// Create a new table, destroying any existing table.
 func (BtreeStorage) Create(_ *btapb.Table) Rows {
 	return btreeRows{btree.New(btreeDegree)}
 }
 
+// GetTables returns metadata about all stored tables.
 func (BtreeStorage) GetTables() []*btapb.Table {
 	return nil
 }
 
+// Open the given table, which must have been previously returned by GetTables().
 func (BtreeStorage) Open(_ *btapb.Table) Rows {
 	panic("should not get here")
 }
 
+// SetTableMeta persists metadata about a table.
 func (f BtreeStorage) SetTableMeta(_ *btapb.Table) {
 }
 

@@ -14,6 +14,7 @@ type TransientLockMap struct {
 	locks map[string]*countedLock // all locks that are currently held
 }
 
+// NewTransientLockMap returns a new TransientLockMap.
 func NewTransientLockMap() *TransientLockMap {
 	return &TransientLockMap{
 		locks: make(map[string]*countedLock),
@@ -52,6 +53,7 @@ func (l *TransientLockMap) Lock(ctx context.Context, key string) bool {
 	return true
 }
 
+// Unlock unlocks the lock for the specified key. Panics if the lock is not currently held.
 func (l *TransientLockMap) Unlock(key string) {
 	lock := func() *countedLock {
 		l.mu.Lock()
@@ -68,6 +70,8 @@ func (l *TransientLockMap) Unlock(key string) {
 	l.returnLockObj(key, lock)
 }
 
+// Run runs the given callback while holding the lock, unless the context finishes before the lock could be
+// acquired, in which case the context error is returned.
 func (l *TransientLockMap) Run(ctx context.Context, key string, f func(ctx context.Context) error) error {
 	if !l.Lock(ctx, key) {
 		return ctx.Err()

@@ -15,9 +15,8 @@ import (
 func NewClient(ctx context.Context) (*storage.Client, error) {
 	if host := os.Getenv("GCS_EMULATOR_HOST"); host != "" {
 		return NewTestClientWithHost(ctx, "http://"+host)
-	} else {
-		return storage.NewClient(ctx)
 	}
+	return storage.NewClient(ctx)
 }
 
 // NewTestClientWithHost returns a new Google storage client that connects to the given host:port address.

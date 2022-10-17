@@ -126,9 +126,8 @@ func newRemoteServer(t *testing.T, name string, btcPool, btcaPool grpc.ClientCon
 	if err != nil {
 		if s, ok := status.FromError(err); ok && s.Code() == codes.NotFound {
 			return ctx, ret, false
-		} else {
-			t.Fatal(err)
 		}
+		t.Fatal(err)
 	}
 
 	return ctx, ret, true

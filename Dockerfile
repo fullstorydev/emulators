@@ -1,4 +1,4 @@
-FROM golang:1.15-alpine As builder
+FROM golang:1.17-alpine As builder
 MAINTAINER FullStory Engineering
 
 # create non-privileged group and user

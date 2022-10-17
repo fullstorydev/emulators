@@ -25,6 +25,7 @@ type LeveldbDiskStorage struct {
 	// TODO: options like compression?
 }
 
+// Create a new table, destroying any existing table.
 func (f LeveldbDiskStorage) Create(tbl *btapb.Table) Rows {
 	f.SetTableMeta(tbl)
 	path := filepath.Join(f.Root, tbl.Name)
@@ -38,6 +39,7 @@ func (f LeveldbDiskStorage) Create(tbl *btapb.Table) Rows {
 	}
 }
 
+// GetTables returns metadata about all stored tables.
 func (f LeveldbDiskStorage) GetTables() []*btapb.Table {
 	// Ignore any errors, just return
 	var ret []*btapb.Table
@@ -67,6 +69,7 @@ func (f LeveldbDiskStorage) GetTables() []*btapb.Table {
 	return ret
 }
 
+// Open the given table, which must have been previously returned by GetTables().
 func (f LeveldbDiskStorage) Open(tbl *btapb.Table) Rows {
 	path := filepath.Join(f.Root, tbl.Name)
 	newFunc := func(nuke bool) *leveldb.DB {
@@ -79,6 +82,7 @@ func (f LeveldbDiskStorage) Open(tbl *btapb.Table) Rows {
 	}
 }
 
+// SetTableMeta persists metadata about a table.
 func (f LeveldbDiskStorage) SetTableMeta(tbl *btapb.Table) {
 	path := filepath.Join(f.Root, tbl.Name)
 	if err := os.MkdirAll(path, 0777); err != nil {

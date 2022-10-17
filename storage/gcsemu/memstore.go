@@ -17,6 +17,7 @@ type memstore struct {
 
 var _ Store = (*memstore)(nil)
 
+// NewMemStore returns a Store that operates purely in memory.
 func NewMemStore() *memstore {
 	return &memstore{buckets: map[string]*memBucket{}}
 }

@@ -1,4 +1,4 @@
-// Google Cloud Storage emulator for development.
+// Package gcsemu implements a Google Cloud Storage emulator for development.
 package gcsemu
 
 import (
@@ -26,6 +26,7 @@ import (
 
 const maybeNotImplementedErrorMsg = "This may be a valid request, but we haven't implemented it in gcsemu yet."
 
+// Options configure the emulator.
 type Options struct {
 	// A storage layer to use; if nil, defaults to in-mem storage.
 	Store Store
@@ -37,7 +38,7 @@ type Options struct {
 	Log func(err error, fmt string, args ...interface{})
 }
 
-// Google Cloud Storage emulator for development.
+// GcsEmu is a Google Cloud Storage emulator for development.
 type GcsEmu struct {
 	// The directory which contains gcs emulation.
 	store Store
@@ -50,7 +51,7 @@ type GcsEmu struct {
 	log     func(err error, fmt string, args ...interface{})
 }
 
-// Creates a Google Cloud Storage emulator.
+// NewGcsEmu creates a new Google Cloud Storage emulator.
 func NewGcsEmu(opts Options) *GcsEmu {
 	if opts.Store == nil {
 		opts.Store = NewMemStore()
@@ -71,7 +72,7 @@ func lockName(bucket string, filename string) string {
 	return bucket + "/" + filename
 }
 
-// Handles emulated GCS requests for "storage.googleapis.com".
+// Handler handles emulated GCS http requests for "storage.googleapis.com".
 func (g *GcsEmu) Handler(w http.ResponseWriter, r *http.Request) {
 	baseUrl := dontNeedUrls
 	{
@@ -257,9 +258,8 @@ func (g *GcsEmu) handleGcsDelete(ctx context.Context, w http.ResponseWriter, buc
 		if err := g.store.Delete(bucket, filename); err != nil {
 			if os.IsNotExist(err) {
 				return fmtErrorfCode(http.StatusNotFound, "%s/%s not found", bucket, filename)
-			} else {
-				return fmt.Errorf("failed to delete %s/%s: %w", bucket, filename, err)
 			}
+			return fmt.Errorf("failed to delete %s/%s: %w", bucket, filename, err)
 		}
 
 		return nil
@@ -300,8 +300,10 @@ func (g *GcsEmu) handleGcsMediaRequest(baseUrl HttpBaseUrl, w http.ResponseWrite
 			if err != nil {
 				g.gapiError(w, http.StatusInternalServerError, fmt.Sprintf("failed to gunzip from %s/%s: %s", bucket, filename, err))
 			}
-			defer gzipReader.Close()
 			if _, err := io.Copy(w, gzipReader); err != nil {
+				g.gapiError(w, http.StatusInternalServerError, fmt.Sprintf("failed to copy+gunzip from %s/%s: %s", bucket, filename, err))
+			}
+			if err := gzipReader.Close(); err != nil {
 				g.gapiError(w, http.StatusInternalServerError, fmt.Sprintf("failed to copy+gunzip from %s/%s: %s", bucket, filename, err))
 			}
 			return
@@ -648,18 +650,16 @@ func (g *GcsEmu) finishUpload(ctx context.Context, baseUrl HttpBaseUrl, obj *sto
 func greaterThanPrefix(item string, prefix string) bool {
 	if len(item) < len(prefix) {
 		return item > prefix
-	} else {
-		return item[:len(prefix)] > prefix
 	}
+	return item[:len(prefix)] > prefix
 }
 
 // Returns true if item is strictly less than anything that begins with prefix
 func lessThanPrefix(item string, prefix string) bool {
 	if len(item) < len(prefix) {
 		return item < prefix[:len(item)]
-	} else {
-		return item < prefix
 	}
+	return item < prefix
 }
 
 var (

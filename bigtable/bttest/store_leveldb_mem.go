@@ -15,6 +15,7 @@ import (
 type LeveldbMemStorage struct {
 }
 
+// Create a new table, destroying any existing table.
 func (f LeveldbMemStorage) Create(_ *btapb.Table) Rows {
 	newFunc := func(nuke bool) *leveldb.DB {
 		return newMemDb(nuke)
@@ -25,14 +26,17 @@ func (f LeveldbMemStorage) Create(_ *btapb.Table) Rows {
 	}
 }
 
+// GetTables returns metadata about all stored tables.
 func (f LeveldbMemStorage) GetTables() []*btapb.Table {
 	return nil
 }
 
+// Open the given table, which must have been previously returned by GetTables().
 func (f LeveldbMemStorage) Open(_ *btapb.Table) Rows {
 	panic("should not get here")
 }
 
+// SetTableMeta persists metadata about a table.
 func (f LeveldbMemStorage) SetTableMeta(_ *btapb.Table) {
 }
 

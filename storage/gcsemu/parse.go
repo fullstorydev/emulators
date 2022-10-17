@@ -23,13 +23,14 @@ var (
 	gcsStoragePathRegex = regexp.MustCompile(gcsStoragePathPattern)
 )
 
+// GcsParams represent a parsed GCS url.
 type GcsParams struct {
 	Bucket   string
 	Object   string
 	IsPublic bool
 }
 
-// Parses a GCS url.
+// ParseGcsUrl parses a GCS url.
 func ParseGcsUrl(u *url.URL) (*GcsParams, bool) {
 	if g, ok := parseGcsUrl(gcsObjectPathRegex, u); ok {
 		return g, true

@@ -25,6 +25,7 @@ type filestore struct {
 
 var _ Store = (*filestore)(nil)
 
+// NewFileStore returns a new Store that writes to the given directory.
 func NewFileStore(gcsDir string) *filestore {
 	return &filestore{gcsDir: gcsDir}
 }

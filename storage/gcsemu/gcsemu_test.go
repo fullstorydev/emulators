@@ -28,7 +28,7 @@ var (
 		{"Basics", testBasics},
 		{"MultipleFiles", testMultipleFiles},
 		{"HugeFile", testHugeFile},
-		{"HugeFile_MultipleOfChunkSize", testHugeFile_MultipleOfChunkSize},
+		{"HugeFile_MultipleOfChunkSize", testHugeFileMultipleOfChunkSize},
 		{"HugeFileWithConditional", testHugeFileWithConditional},
 		{"ConditionalUpdates", testConditionalUpdates},
 		{"GenNotMatchDoesntExist", testGenNotMatchDoesntExist},
@@ -176,7 +176,7 @@ func testHugeFile(t *testing.T, bh BucketHandle) {
 	doHugeFile(t, bh, "gscemu-test/huge.txt", googleapi.DefaultUploadChunkSize+4*1024*1024)
 }
 
-func testHugeFile_MultipleOfChunkSize(t *testing.T, bh BucketHandle) {
+func testHugeFileMultipleOfChunkSize(t *testing.T, bh BucketHandle) {
 	doHugeFile(t, bh, "gscemu-test/huge2.txt", googleapi.DefaultUploadChunkSize*4)
 }
 

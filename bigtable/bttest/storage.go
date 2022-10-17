@@ -5,20 +5,21 @@ import (
 	btpb "google.golang.org/genproto/googleapis/bigtable/v2"
 )
 
-// Implements a storage layer for all bigtable emulator data.
+// Storage implements a storage layer for all bigtable emulator data.
 type Storage interface {
 	// Create a new table, destroying any existing table.
 	Create(tbl *btapb.Table) Rows
-	// Returns metadata about all stored tables.
+	// GetTables returns metadata about all stored tables.
 	GetTables() []*btapb.Table
 	// Open the given table, which must have been previously returned by GetTables().
 	Open(tbl *btapb.Table) Rows
-	// Persist metadata about a table.
+	// SetTableMeta persists metadata about a table.
 	SetTableMeta(tbl *btapb.Table)
 }
 
 type keyType = []byte
 
+// Rows implements storage algorithms per table.
 type Rows interface {
 	// Ascend calls the iterator for every row in the table within the range
 	// [first, last], until iterator returns false.
@@ -55,4 +56,5 @@ type Rows interface {
 	Close()
 }
 
+// RowIterator is a callback function that receives a Row.
 type RowIterator = func(r *btpb.Row) bool
