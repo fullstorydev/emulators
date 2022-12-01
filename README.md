@@ -117,8 +117,7 @@ Our storage emulator was written in house.
 ### Installing
 
 ```sh
-go get github.com/fullstorydev/emulators/storage
-go install github.com/fullstorydev/emulators/storage/... # for the command-line `gcsemulator`
+go install github.com/fullstorydev/emulators/storage/cmd/gcsemulator@latest
 ```
 
 ### Running, out of process
