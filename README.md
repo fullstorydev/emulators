@@ -37,8 +37,7 @@ Our bigtable emulator is a fork of [bigtable/bttest](https://github.com/googleap
 ### Installing
 
 ```sh
-go get github.com/fullstorydev/emulators/bigtable
-go install github.com/fullstorydev/emulators/bigtable/... # for the command-line `cbtemulator`
+go install github.com/fullstorydev/emulators/bigtable/...@latest
 ```
 
 ### Running, out of process
@@ -117,7 +116,7 @@ Our storage emulator was written in house.
 ### Installing
 
 ```sh
-go install github.com/fullstorydev/emulators/storage/cmd/gcsemulator@latest
+go install github.com/fullstorydev/emulators/storage/...@latest
 ```
 
 ### Running, out of process
