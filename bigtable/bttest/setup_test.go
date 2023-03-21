@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
+	"cloud.google.com/go/bigtable"
 	emptypb "github.com/golang/protobuf/ptypes/empty"
 	btapb "google.golang.org/genproto/googleapis/bigtable/admin/v2"
 	btpb "google.golang.org/genproto/googleapis/bigtable/v2"
@@ -35,8 +35,8 @@ func newClient(t *testing.T) (context.Context, *clientIntf, bool) {
 	svr := &server{
 		tables:  make(map[string]*table),
 		storage: BtreeStorage{},
-		clock: func() time.Time {
-			return time.Unix(0, 0).UTC()
+		clock: func() bigtable.Timestamp {
+			return 0
 		},
 	}
 

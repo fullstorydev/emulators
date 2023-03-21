@@ -46,6 +46,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"cloud.google.com/go/bigtable"
 	emptypb "github.com/golang/protobuf/ptypes/empty"
 	"github.com/golang/protobuf/ptypes/wrappers"
 	btapb "google.golang.org/genproto/googleapis/bigtable/admin/v2"
@@ -84,7 +85,7 @@ type Server struct {
 // methods that are only relevant to the fake's implementation.
 type server struct {
 	storage Storage
-	clock   func() time.Time
+	clock   func() bigtable.Timestamp
 
 	mu     sync.Mutex
 	tables map[string]*table // keyed by fully qualified name
@@ -109,8 +110,8 @@ func NewServer(laddr string, opt ...grpc.ServerOption) (*Server, error) {
 type Options struct {
 	// A storage layer to use; if nil, defaults to LeveldbMemStorage.
 	Storage Storage
-	// The clock to use use; if nil, defaults to time.Now().
-	Clock func() time.Time
+	// The clock to use use; if nil, defaults to bigtable.Now().
+	Clock func() bigtable.Timestamp
 
 	// Grpc server options.
 	GrpcOpts []grpc.ServerOption
@@ -124,7 +125,7 @@ func NewServerWithOptions(laddr string, opt Options) (*Server, error) {
 		opt.Storage = LeveldbMemStorage{}
 	}
 	if opt.Clock == nil {
-		opt.Clock = time.Now
+		opt.Clock = bigtable.Now
 	}
 	l, err := net.Listen("tcp", laddr)
 	if err != nil {
@@ -1025,7 +1026,7 @@ func (s *server) CheckAndMutateRow(ctx context.Context, req *btpb.CheckAndMutate
 
 // applyMutations applies a sequence of mutations to a row.
 // It assumes r.mu is locked.
-func applyMutations(tbl *table, r *btpb.Row, muts []*btpb.Mutation, now time.Time) error {
+func applyMutations(tbl *table, r *btpb.Row, muts []*btpb.Mutation, now bigtable.Timestamp) error {
 	fs := tbl.def.ColumnFamilies
 	for _, mut := range muts {
 		switch mut := mut.Mutation.(type) {
@@ -1038,7 +1039,7 @@ func applyMutations(tbl *table, r *btpb.Row, muts []*btpb.Mutation, now time.Tim
 			}
 			ts := set.TimestampMicros
 			if ts == -1 { // bigtable.ServerTime
-				ts = newTimestamp(now)
+				ts = int64(now)
 			}
 			if !tbl.validTimestamp(ts) {
 				return fmt.Errorf("invalid timestamp %d", ts)
@@ -1151,12 +1152,6 @@ func maxTimestamp(x, y int64) int64 {
 	return y
 }
 
-func newTimestamp(now time.Time) int64 {
-	ts := now.UnixNano() / 1e3
-	ts -= ts % 1000 // round to millisecond granularity
-	return ts
-}
-
 func appendOrReplaceCell(cs []*btpb.Cell, newCell *btpb.Cell) []*btpb.Cell {
 	replaced := false
 	for i, cell := range cs {
@@ -1198,7 +1193,7 @@ func (s *server) ReadModifyWriteRow(ctx context.Context, req *btpb.ReadModifyWri
 
 		fam := getOrCreateFamily(r, rule.FamilyName)
 		col := getOrCreateColumn(fam, rule.ColumnQualifier)
-		ts := newTimestamp(now)
+		ts := int64(now)
 		var newCell *btpb.Cell
 		var prevVal []byte
 		if len(col.Cells) > 0 {
@@ -1377,7 +1372,7 @@ func (t *table) updateRow(r *btpb.Row) {
 	}
 }
 
-func (t *table) gc(now time.Time, done <-chan struct{}, force bool) {
+func (t *table) gc(now bigtable.Timestamp, done <-chan struct{}, force bool) {
 	if !force {
 		// Recheck lastReadNanos/lastWriteNanos
 		const quiesceNanos = int64(5 * time.Minute)
@@ -1535,7 +1530,7 @@ func rowsize(r *btpb.Row) int {
 var gcTypeWarn sync.Once
 
 // applyGC applies the given GC rule to the cells.
-func applyGC(cells []*btpb.Cell, rule *btapb.GcRule, now time.Time) []*btpb.Cell {
+func applyGC(cells []*btpb.Cell, rule *btapb.GcRule, now bigtable.Timestamp) []*btpb.Cell {
 	switch rule := rule.Rule.(type) {
 	default:
 		// TODO(dsymonds): Support GcRule_Intersection_
@@ -1549,7 +1544,7 @@ func applyGC(cells []*btpb.Cell, rule *btapb.GcRule, now time.Time) []*btpb.Cell
 		return cells
 	case *btapb.GcRule_MaxAge:
 		// Timestamps are in microseconds.
-		cutoff := now.UnixNano() / 1e3
+		cutoff := int64(now)
 		cutoff -= rule.MaxAge.Seconds * 1e6
 		cutoff -= int64(rule.MaxAge.Nanos) / 1e3
 		// The slice of cells in in descending timestamp order.
