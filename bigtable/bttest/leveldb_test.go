@@ -4,7 +4,8 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
+
+	"cloud.google.com/go/bigtable"
 )
 
 var (
@@ -42,8 +43,8 @@ func TestLevelDbMem(t *testing.T) {
 		svr := &server{
 			tables:  make(map[string]*table),
 			storage: LeveldbMemStorage{},
-			clock: func() time.Time {
-				return time.Unix(0, 0).UTC()
+			clock: func() bigtable.Timestamp {
+				return 0
 			},
 		}
 
@@ -69,8 +70,8 @@ func TestLevelDbDisk(t *testing.T) {
 		svr := &server{
 			tables:  make(map[string]*table),
 			storage: LeveldbDiskStorage{Root: "./test-out"},
-			clock: func() time.Time {
-				return time.Unix(0, 0).UTC()
+			clock: func() bigtable.Timestamp {
+				return 0
 			},
 		}
 
