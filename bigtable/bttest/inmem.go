@@ -1039,7 +1039,7 @@ func applyMutations(tbl *table, r *btpb.Row, muts []*btpb.Mutation, now bigtable
 			}
 			ts := set.TimestampMicros
 			if ts == -1 { // bigtable.ServerTime
-				ts = int64(now)
+				ts = int64(now.TruncateToMilliseconds())
 			}
 			if !tbl.validTimestamp(ts) {
 				return fmt.Errorf("invalid timestamp %d", ts)
@@ -1193,7 +1193,7 @@ func (s *server) ReadModifyWriteRow(ctx context.Context, req *btpb.ReadModifyWri
 
 		fam := getOrCreateFamily(r, rule.FamilyName)
 		col := getOrCreateColumn(fam, rule.ColumnQualifier)
-		ts := int64(now)
+		ts := int64(now.TruncateToMilliseconds())
 		var newCell *btpb.Cell
 		var prevVal []byte
 		if len(col.Cells) > 0 {
