@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 
+	"github.com/fullstorydev/emulators/storage/gcsutil"
 	"google.golang.org/api/storage/v1"
 )
 
@@ -16,16 +17,16 @@ type Store interface {
 	GetBucketMeta(baseUrl HttpBaseUrl, bucket string) (*storage.Bucket, error)
 
 	// Get returns a file's contents and metadata.
-	Get(url HttpBaseUrl, bucket string, filename string) (*storage.Object, []byte, error)
+	Get(url HttpBaseUrl, bucket string, filename string) (*gcsutil.Object, []byte, error)
 
 	// GetMeta returns a file's metadata.
-	GetMeta(url HttpBaseUrl, bucket string, filename string) (*storage.Object, error)
+	GetMeta(url HttpBaseUrl, bucket string, filename string) (*gcsutil.Object, error)
 
 	// Add creates the specified file.
-	Add(bucket string, filename string, contents []byte, meta *storage.Object) error
+	Add(bucket string, filename string, contents []byte, meta *gcsutil.Object) error
 
 	// UpdateMeta updates the given file's metadata.
-	UpdateMeta(bucket string, filename string, meta *storage.Object, metagen int64) error
+	UpdateMeta(bucket string, filename string, meta *gcsutil.Object, metagen int64) error
 
 	// Copy copies the file
 	Copy(srcBucket string, srcFile string, dstBucket string, dstFile string) (bool, error)
@@ -34,7 +35,7 @@ type Store interface {
 	Delete(bucket string, filename string) error
 
 	// ReadMeta reads the GCS metadata for a file, when you already have file info.
-	ReadMeta(url HttpBaseUrl, bucket string, filename string, fInfo os.FileInfo) (*storage.Object, error)
+	ReadMeta(url HttpBaseUrl, bucket string, filename string, fInfo os.FileInfo) (*gcsutil.Object, error)
 
 	// Walks the given bucket.
 	Walk(ctx context.Context, bucket string, cb func(ctx context.Context, filename string, fInfo os.FileInfo) error) error

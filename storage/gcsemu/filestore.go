@@ -12,6 +12,7 @@ import (
 	"time"
 
 	cloudstorage "cloud.google.com/go/storage"
+	"github.com/fullstorydev/emulators/storage/gcsutil"
 	"google.golang.org/api/storage/v1"
 )
 
@@ -37,7 +38,25 @@ type composeObj struct {
 
 func (fs *filestore) CreateBucket(bucket string) error {
 	bucketDir := filepath.Join(fs.gcsDir, bucket)
-	return os.MkdirAll(bucketDir, 0777)
+	if err := os.MkdirAll(bucketDir, 0777); err != nil {
+		return err
+	}
+
+	now := time.Now().UTC()
+	_ = os.Chtimes(bucketDir, now, now)
+
+	meta := &storage.Bucket{}
+	meta.Metageneration = now.UnixNano()
+	if meta.TimeCreated == "" {
+		meta.TimeCreated = now.UTC().Format(time.RFC3339Nano)
+	}
+
+	fMeta := metaFilename(bucketDir)
+	if err := ioutil.WriteFile(fMeta, mustJson(meta), 0666); err != nil {
+		return fmt.Errorf("could not write metadata file: %s: %w", fMeta, err)
+	}
+
+	return nil
 }
 
 func (fs *filestore) GetBucketMeta(baseUrl HttpBaseUrl, bucket string) (*storage.Bucket, error) {
@@ -51,11 +70,25 @@ func (fs *filestore) GetBucketMeta(baseUrl HttpBaseUrl, bucket string) (*storage
 	}
 
 	obj := BucketMeta(baseUrl, bucket)
+	fMeta := metaFilename(f)
+	buf, err := ioutil.ReadFile(fMeta)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("could not read metadata file %s: %w", fMeta, err)
+		}
+	}
+
+	if len(buf) != 0 {
+		if err := json.NewDecoder(bytes.NewReader(buf)).Decode(obj); err != nil {
+			return nil, fmt.Errorf("could not parse file attributes %q for %s: %w", buf, f, err)
+		}
+	}
+
 	obj.Updated = fInfo.ModTime().UTC().Format(time.RFC3339Nano)
 	return obj, nil
 }
 
-func (fs *filestore) Get(baseUrl HttpBaseUrl, bucket string, filename string) (*storage.Object, []byte, error) {
+func (fs *filestore) Get(baseUrl HttpBaseUrl, bucket string, filename string) (*gcsutil.Object, []byte, error) {
 	obj, err := fs.GetMeta(baseUrl, bucket, filename)
 	if err != nil {
 		return nil, nil, err
@@ -72,7 +105,7 @@ func (fs *filestore) Get(baseUrl HttpBaseUrl, bucket string, filename string) (*
 	return obj, contents, nil
 }
 
-func (fs *filestore) GetMeta(baseUrl HttpBaseUrl, bucket string, filename string) (*storage.Object, error) {
+func (fs *filestore) GetMeta(baseUrl HttpBaseUrl, bucket string, filename string) (*gcsutil.Object, error) {
 	f := fs.filename(bucket, filename)
 	fInfo, err := os.Stat(f)
 	if err != nil {
@@ -82,17 +115,31 @@ func (fs *filestore) GetMeta(baseUrl HttpBaseUrl, bucket string, filename string
 		return nil, fmt.Errorf("stating  %s: %w", f, err)
 	}
 
+	if (fInfo.IsDir() && !strings.HasSuffix(filename, "/")) ||
+		(!fInfo.IsDir() && strings.HasSuffix(filename, "/")) {
+		return nil, nil
+	}
+
 	return fs.ReadMeta(baseUrl, bucket, filename, fInfo)
 }
 
-func (fs *filestore) Add(bucket string, filename string, contents []byte, meta *storage.Object) error {
+func (fs *filestore) Add(bucket string, filename string, contents []byte, meta *gcsutil.Object) error {
 	f := fs.filename(bucket, filename)
-	if err := os.MkdirAll(filepath.Dir(f), 0777); err != nil {
-		return fmt.Errorf("could not create dirs for:  %s: %w", f, err)
-	}
+	if strings.HasSuffix(filename, "/") {
+		if len(contents) != 0 {
+			return fmt.Errorf("could not create dir with non zero length:  %s", f)
+		}
+		if err := os.MkdirAll(f, 0777); err != nil {
+			return fmt.Errorf("could not create dir for:  %s: %w", f, err)
+		}
+	} else {
+		if err := os.MkdirAll(filepath.Dir(f), 0777); err != nil {
+			return fmt.Errorf("could not create dirs for:  %s: %w", f, err)
+		}
 
-	if err := ioutil.WriteFile(f, contents, 0666); err != nil {
-		return fmt.Errorf("could not write:  %s: %w", f, err)
+		if err := ioutil.WriteFile(f, contents, 0666); err != nil {
+			return fmt.Errorf("could not write:  %s: %w", f, err)
+		}
 	}
 
 	// Force a new modification time, since this is what Generation is based on.
@@ -113,7 +160,7 @@ func (fs *filestore) Add(bucket string, filename string, contents []byte, meta *
 	return nil
 }
 
-func (fs *filestore) UpdateMeta(bucket string, filename string, meta *storage.Object, metagen int64) error {
+func (fs *filestore) UpdateMeta(bucket string, filename string, meta *gcsutil.Object, metagen int64) error {
 	InitScrubbedMeta(meta, filename)
 	meta.Metageneration = metagen
 
@@ -138,10 +185,24 @@ func (fs *filestore) Copy(srcBucket string, srcFile string, dstBucket string, ds
 
 	// Copy with metadata
 	f1 := fs.filename(srcBucket, srcFile)
-	contents, err := ioutil.ReadFile(f1)
+	fInfo, err := os.Stat(f1)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("stating  %s: %w", f1, err)
 	}
+
+	if (fInfo.IsDir() && !strings.HasSuffix(srcFile, "/")) ||
+		(!fInfo.IsDir() && strings.HasSuffix(srcFile, "/")) {
+		return false, os.ErrNotExist
+	}
+
+	contents := make([]byte, 0)
+	if !fInfo.IsDir() {
+		contents, err = ioutil.ReadFile(f1)
+		if err != nil {
+			return false, err
+		}
+	}
+
 	meta.TimeCreated = "" // reset creation time on the dest file
 	err = fs.Add(dstBucket, dstFile, contents, meta)
 	if err != nil {
@@ -178,28 +239,16 @@ func (fs *filestore) Delete(bucket string, filename string) error {
 		return fmt.Errorf("could not delete %s: %w", f, err)
 	}
 
-	// Try to delete empty directories
-	for fp := filepath.Dir(f); len(fp) > len(fs.filename(bucket, "")); fp = filepath.Dir(fp) {
-		files, err := ioutil.ReadDir(fp)
-		if err != nil || len(files) > 0 {
-			// Quit trying to delete the directory
-			break
-		}
-		if err := os.Remove(fp); err != nil {
-			// If removing fails, quit trying
-			break
-		}
-	}
 	return nil
 }
 
-func (fs *filestore) ReadMeta(baseUrl HttpBaseUrl, bucket string, filename string, fInfo os.FileInfo) (*storage.Object, error) {
-	if fInfo.IsDir() {
+func (fs *filestore) ReadMeta(baseUrl HttpBaseUrl, bucket string, filename string, fInfo os.FileInfo) (*gcsutil.Object, error) {
+	if fInfo.IsDir() && !strings.HasSuffix(filename, "/") {
 		return nil, nil
 	}
 
 	f := fs.filename(bucket, filename)
-	obj := &storage.Object{}
+	obj := &gcsutil.Object{}
 	fMeta := metaFilename(f)
 	buf, err := ioutil.ReadFile(fMeta)
 	if err != nil {
@@ -215,7 +264,20 @@ func (fs *filestore) ReadMeta(baseUrl HttpBaseUrl, bucket string, filename strin
 	}
 
 	InitMetaWithUrls(baseUrl, obj, bucket, filename, uint64(fInfo.Size()))
-	obj.Generation = fInfo.ModTime().UnixNano() // use the mod time as the generation number
+	if fInfo.IsDir() {
+		//Directory as empty blobs are never modified they are either created or deleted in gcs
+		creationTime, err := time.Parse(time.RFC3339, obj.TimeCreated)
+		if err != nil {
+			obj.Generation = 1
+		} else {
+			obj.Generation = creationTime.UnixNano()
+		}
+
+		size := uint64(0)
+		obj.Size = &size
+	} else {
+		obj.Generation = fInfo.ModTime().UnixNano() // use the mod time as the generation number
+	}
 	obj.Updated = fInfo.ModTime().UTC().Format(time.RFC3339Nano)
 	return obj, nil
 }

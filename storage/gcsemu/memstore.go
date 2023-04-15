@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fullstorydev/emulators/storage/gcsutil"
 	"github.com/google/btree"
 	"google.golang.org/api/storage/v1"
 )
@@ -37,7 +38,7 @@ func (ms *memstore) getBucket(bucket string) *memBucket {
 }
 
 type memFile struct {
-	meta storage.Object
+	meta gcsutil.Object
 	data []byte
 }
 
@@ -63,13 +64,14 @@ func (ms *memstore) CreateBucket(bucket string) error {
 func (ms *memstore) GetBucketMeta(baseUrl HttpBaseUrl, bucket string) (*storage.Bucket, error) {
 	if b := ms.getBucket(bucket); b != nil {
 		obj := BucketMeta(baseUrl, bucket)
+		obj.TimeCreated = b.created.UTC().Format(time.RFC3339Nano)
 		obj.Updated = b.created.UTC().Format(time.RFC3339Nano)
 		return obj, nil
 	}
 	return nil, nil
 }
 
-func (ms *memstore) Get(baseUrl HttpBaseUrl, bucket string, filename string) (*storage.Object, []byte, error) {
+func (ms *memstore) Get(baseUrl HttpBaseUrl, bucket string, filename string) (*gcsutil.Object, []byte, error) {
 	f := ms.find(bucket, filename)
 	if f != nil {
 		return &f.meta, f.data, nil
@@ -77,7 +79,7 @@ func (ms *memstore) Get(baseUrl HttpBaseUrl, bucket string, filename string) (*s
 	return nil, nil, nil
 }
 
-func (ms *memstore) GetMeta(baseUrl HttpBaseUrl, bucket string, filename string) (*storage.Object, error) {
+func (ms *memstore) GetMeta(baseUrl HttpBaseUrl, bucket string, filename string) (*gcsutil.Object, error) {
 	f := ms.find(bucket, filename)
 	if f != nil {
 		meta := f.meta
@@ -87,7 +89,7 @@ func (ms *memstore) GetMeta(baseUrl HttpBaseUrl, bucket string, filename string)
 	return nil, nil
 }
 
-func (ms *memstore) Add(bucket string, filename string, contents []byte, meta *storage.Object) error {
+func (ms *memstore) Add(bucket string, filename string, contents []byte, meta *gcsutil.Object) error {
 	_ = ms.CreateBucket(bucket)
 
 	InitScrubbedMeta(meta, filename)
@@ -111,7 +113,7 @@ func (ms *memstore) Add(bucket string, filename string, contents []byte, meta *s
 	return nil
 }
 
-func (ms *memstore) UpdateMeta(bucket string, filename string, meta *storage.Object, metagen int64) error {
+func (ms *memstore) UpdateMeta(bucket string, filename string, meta *gcsutil.Object, metagen int64) error {
 	f := ms.find(bucket, filename)
 	if f == nil {
 		return os.ErrNotExist
@@ -161,7 +163,7 @@ func (ms *memstore) Delete(bucket string, filename string) error {
 	return nil
 }
 
-func (ms *memstore) ReadMeta(baseUrl HttpBaseUrl, bucket string, filename string, _ os.FileInfo) (*storage.Object, error) {
+func (ms *memstore) ReadMeta(baseUrl HttpBaseUrl, bucket string, filename string, _ os.FileInfo) (*gcsutil.Object, error) {
 	return ms.GetMeta(baseUrl, bucket, filename)
 }
 
@@ -182,7 +184,7 @@ func (ms *memstore) Walk(ctx context.Context, bucket string, cb func(ctx context
 
 func (ms *memstore) key(filename string) btree.Item {
 	return &memFile{
-		meta: storage.Object{
+		meta: gcsutil.Object{
 			Name: filename,
 		},
 	}

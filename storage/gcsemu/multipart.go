@@ -3,15 +3,17 @@ package gcsemu
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/http/httputil"
 
-	"google.golang.org/api/storage/v1"
+	"github.com/fullstorydev/emulators/storage/gcsutil"
 )
 
-func readMultipartInsert(r *http.Request) (*storage.Object, []byte, error) {
+func readMultipartInsert(r *http.Request) (*gcsutil.Object, []byte, error) {
 	v := r.Header.Get("Content-Type")
 	if v == "" {
 		return nil, nil, fmt.Errorf("failed to parse Content-Type header: %q", v)
@@ -41,13 +43,13 @@ func readMultipartInsert(r *http.Request) (*storage.Object, []byte, error) {
 		return b, nil
 	}
 
-	// read the first part to get the storage.Object (in json)
+	// read the first part to get the gcsutil.Object (in json)
 	b, err := readPart()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read first part of body: %w", err)
 	}
 
-	var obj storage.Object
+	var obj gcsutil.Object
 	err = json.Unmarshal(b, &obj)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to parse body as json: %w", err)
@@ -59,7 +61,17 @@ func readMultipartInsert(r *http.Request) (*storage.Object, []byte, error) {
 		return nil, nil, fmt.Errorf("failed to read second part of body: %w", err)
 	}
 
-	obj.Size = uint64(len(contents))
+	size := uint64(len(contents))
+	obj.Size = &size
 
 	return &obj, contents, nil
+}
+
+func writeMultipartResponse(r *http.Response, w io.Writer, contentId string) {
+	dump, err := httputil.DumpResponse(r, true)
+	if err != nil {
+		fmt.Fprintf(w, "Content-Type: text/plain; charset=utf-8\r\nContent-ID: %s\r\nContent-Length: 0\r\n\r\nHTTP/1.1 500 Internal Server Error", contentId)
+		return
+	}
+	w.Write(dump)
 }

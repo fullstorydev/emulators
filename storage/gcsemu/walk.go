@@ -10,11 +10,10 @@ import (
 	"strings"
 
 	"github.com/fullstorydev/emulators/storage/gcsutil"
-	"google.golang.org/api/storage/v1"
 )
 
 // Iterate over the file system to serve a GCS list-bucket request.
-func (g *GcsEmu) makeBucketListResults(ctx context.Context, baseUrl HttpBaseUrl, w http.ResponseWriter, delimiter string, cursor string, prefix string, bucket string, maxResults int) {
+func (g *GcsEmu) makeBucketListResults(ctx context.Context, baseUrl HttpBaseUrl, w http.ResponseWriter, delimiter string, cursor string, prefix string, bucket string, maxResults int, includeTrailingDelimiter bool) {
 	var errAbort = errors.New("sentinel error to abort walk")
 
 	type item struct {
@@ -52,7 +51,8 @@ func (g *GcsEmu) makeBucketListResults(ctx context.Context, baseUrl HttpBaseUrl,
 				dbgWalk("%q < prefix=%q skip dir", filename, prefix)
 				return filepath.SkipDir
 			}
-			return nil // keep going
+
+			filename += "/"
 		}
 
 		// If the file is <= cursor, or < prefix, skip.
@@ -111,7 +111,7 @@ func (g *GcsEmu) makeBucketListResults(ctx context.Context, baseUrl HttpBaseUrl,
 	}
 
 	// Resolve the found items.
-	var items []*storage.Object
+	var items []*gcsutil.Object
 	for _, item := range found {
 		if obj, err := g.store.ReadMeta(baseUrl, bucket, item.filename, item.fInfo); err != nil {
 			// return our partial results + the cursor so that the client can retry from this point
@@ -128,7 +128,7 @@ func (g *GcsEmu) makeBucketListResults(ctx context.Context, baseUrl HttpBaseUrl,
 		nextPageToken = gcsutil.EncodePageToken(lastItemName)
 	}
 
-	rsp := storage.Objects{
+	rsp := gcsutil.Objects{
 		Kind:          "storage#objects",
 		NextPageToken: nextPageToken,
 		Items:         items,

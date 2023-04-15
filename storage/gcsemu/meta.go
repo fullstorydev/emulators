@@ -5,6 +5,7 @@ import (
 	"mime"
 	"strings"
 
+	"github.com/fullstorydev/emulators/storage/gcsutil"
 	"google.golang.org/api/storage/v1"
 )
 
@@ -15,11 +16,12 @@ func BucketMeta(baseUrl HttpBaseUrl, bucket string) *storage.Bucket {
 		Name:         bucket,
 		SelfLink:     BucketUrl(baseUrl, bucket),
 		StorageClass: "STANDARD",
+		Location:     "US",
 	}
 }
 
 // InitScrubbedMeta "bakes" metadata with intrinsic values and removes fields that are intrinsic / computed.
-func InitScrubbedMeta(meta *storage.Object, filename string) {
+func InitScrubbedMeta(meta *gcsutil.Object, filename string) {
 	parts := strings.Split(filename, ".")
 	ext := parts[len(parts)-1]
 
@@ -31,7 +33,7 @@ func InitScrubbedMeta(meta *storage.Object, filename string) {
 }
 
 // InitMetaWithUrls "bakes" metadata with intrinsic values, including computed links.
-func InitMetaWithUrls(baseUrl HttpBaseUrl, meta *storage.Object, bucket string, filename string, size uint64) {
+func InitMetaWithUrls(baseUrl HttpBaseUrl, meta *gcsutil.Object, bucket string, filename string, size uint64) {
 	parts := strings.Split(filename, ".")
 	ext := parts[len(parts)-1]
 
@@ -43,17 +45,18 @@ func InitMetaWithUrls(baseUrl HttpBaseUrl, meta *storage.Object, bucket string, 
 	meta.MediaLink = ObjectUrl(baseUrl, bucket, filename) + "?alt=media"
 	meta.Name = filename
 	meta.SelfLink = ObjectUrl(baseUrl, bucket, filename)
-	meta.Size = size
+	meta.Size = &size
 	meta.StorageClass = "STANDARD"
 }
 
 // ScrubMeta removes fields that are intrinsic / computed for minimal storage.
-func ScrubMeta(meta *storage.Object) {
+func ScrubMeta(meta *gcsutil.Object) {
+	size := uint64(0)
 	meta.Bucket = ""
 	meta.Kind = ""
 	meta.MediaLink = ""
 	meta.SelfLink = ""
-	meta.Size = 0
+	meta.Size = &size
 	meta.StorageClass = ""
 }
 
