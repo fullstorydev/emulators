@@ -152,7 +152,7 @@ func (g *GcsEmu) Handler(w http.ResponseWriter, r *http.Request) {
 			g.gapiError(w, http.StatusBadRequest, fmt.Sprintf("unsupported value for alt param to PATCH: %q\n%s", alt, maybeNotImplementedErrorMsg))
 		}
 	case "POST":
-		if bucket == "" && r.URL.Query().Get("alt") == "json" {
+		if bucket == "" {
 			g.handleGcsNewBucket(ctx, w, r, conds)
 		} else if object == "" {
 			g.handleGcsNewObject(ctx, baseUrl, w, r, bucket, conds)
