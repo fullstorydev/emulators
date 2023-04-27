@@ -122,6 +122,18 @@ func (g *GcsEmu) Handler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if r.Header.Get("content-encoding") == "gzip" {
+		gzipReader, err := gzip.NewReader(r.Body)
+		if err != nil && io.EOF != err {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if err == nil {
+			r.Body = gzipReader
+		}
+	}
+
 	switch r.Method {
 	case "DELETE":
 		g.handleGcsDelete(ctx, w, bucket, object, conds)
