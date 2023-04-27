@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -72,6 +71,11 @@ func lockName(bucket string, filename string) string {
 	return bucket + "/" + filename
 }
 
+// Register the emulator's HTTP handlers on the given mux.
+func (g *GcsEmu) Register(mux *http.ServeMux) {
+	mux.HandleFunc("/", DrainRequestHandler(GzipRequestHandler(g.Handler)))
+}
+
 // Handler handles emulated GCS http requests for "storage.googleapis.com".
 func (g *GcsEmu) Handler(w http.ResponseWriter, r *http.Request) {
 	baseUrl := dontNeedUrls
@@ -88,13 +92,6 @@ func (g *GcsEmu) Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	defer func() {
-		// Always drain and close the request body to properly free up the connection.
-		// See https://groups.google.com/forum/#!topic/golang-nuts/pP3zyUlbT00
-		_, _ = io.Copy(ioutil.Discard, r.Body)
-		_ = r.Body.Close()
-	}()
-
 	p, ok := ParseGcsUrl(r.URL)
 	if !ok {
 		g.gapiError(w, http.StatusBadRequest, "unrecognized request")
@@ -535,7 +532,7 @@ func (g *GcsEmu) handleGcsNewObjectResume(ctx context.Context, baseUrl HttpBaseU
 
 	u := found.(*uploadData)
 
-	contents, err := ioutil.ReadAll(r.Body)
+	contents, err := io.ReadAll(r.Body)
 	if err != nil {
 		g.gapiError(w, http.StatusBadRequest, fmt.Sprintf("failed to ready body: %s", err))
 		return
