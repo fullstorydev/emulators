@@ -26,9 +26,9 @@ type Server struct {
 func NewServer(laddr string, opts Options) (*Server, error) {
 	gcsEmu := NewGcsEmu(opts)
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", gcsEmu.Handler)
+	gcsEmu.Register(mux)
 
-	srv := httptest.NewUnstartedServer(http.HandlerFunc(gcsEmu.Handler))
+	srv := httptest.NewUnstartedServer(mux)
 	l, err := net.Listen("tcp", laddr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to listen on addr %s: %w", laddr, err)

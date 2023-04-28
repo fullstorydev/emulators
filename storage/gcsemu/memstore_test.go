@@ -22,10 +22,10 @@ func TestMemStore(t *testing.T) {
 		},
 	})
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", gcsEmu.Handler)
+	gcsEmu.Register(mux)
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Logf("about to method=%s host=%s u=%s", r.Method, r.Host, r.URL)
-		gcsEmu.Handler(w, r)
+		mux.ServeHTTP(w, r)
 	}))
 	t.Cleanup(svr.Close)
 
