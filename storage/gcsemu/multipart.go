@@ -3,10 +3,12 @@ package gcsemu
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/http/httputil"
 
 	"google.golang.org/api/storage/v1"
 )
@@ -62,4 +64,13 @@ func readMultipartInsert(r *http.Request) (*storage.Object, []byte, error) {
 	obj.Size = uint64(len(contents))
 
 	return &obj, contents, nil
+}
+
+func writeMultipartResponse(r *http.Response, w io.Writer, contentId string) {
+	dump, err := httputil.DumpResponse(r, true)
+	if err != nil {
+		fmt.Fprintf(w, "Content-Type: text/plain; charset=utf-8\r\nContent-ID: %s\r\nContent-Length: 0\r\n\r\nHTTP/1.1 500 Internal Server Error", contentId)
+		return
+	}
+	w.Write(dump)
 }

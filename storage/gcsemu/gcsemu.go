@@ -2,6 +2,7 @@
 package gcsemu
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -10,7 +11,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/http/httptest"
+	"net/textproto"
 	"net/url"
 	"os"
 	"strconv"
@@ -74,6 +78,7 @@ func lockName(bucket string, filename string) string {
 // Register the emulator's HTTP handlers on the given mux.
 func (g *GcsEmu) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/", DrainRequestHandler(GzipRequestHandler(g.Handler)))
+	mux.HandleFunc("/batch/storage/v1", DrainRequestHandler(GzipRequestHandler(g.BatchHandler)))
 }
 
 // Handler handles emulated GCS http requests for "storage.googleapis.com".
@@ -622,6 +627,70 @@ func (g *GcsEmu) handleGcsNewObjectResume(ctx context.Context, baseUrl HttpBaseU
 	w.Header().Set("x-goog-generation", strconv.FormatInt(meta.Generation, 10))
 	w.Header().Set("X-Goog-Metageneration", strconv.FormatInt(meta.Metageneration, 10))
 	g.jsonRespond(w, meta)
+}
+
+func (g *GcsEmu) BatchHandler(w http.ResponseWriter, r *http.Request) {
+	reader, err := r.MultipartReader()
+	if err != nil {
+		g.gapiError(w, httpStatusCodeOf(err), err.Error())
+		return
+	}
+
+	var b bytes.Buffer
+	mw := multipart.NewWriter(&b)
+	defer mw.Close()
+
+	w.Header().Set("Content-Type", "multipart/mixed; boundary="+mw.Boundary())
+	w.WriteHeader(http.StatusOK)
+	part, err := reader.NextPart()
+	for ; err == nil; part, err = reader.NextPart() {
+		contentID := part.Header.Get("Content-ID")
+		if contentID == "" {
+			// missing content ID, skip
+			continue
+		}
+
+		partHeaders := textproto.MIMEHeader{}
+		partHeaders.Set("Content-Type", "application/http")
+		partHeaders.Set("Content-ID", strings.Replace(contentID, "<", "<response-", 1))
+		partWriter, err := mw.CreatePart(partHeaders)
+		if err != nil {
+			continue
+		}
+
+		partResponseWriter := httptest.NewRecorder()
+		if part.Header.Get("Content-Type") != "application/http" {
+			http.Error(partResponseWriter, "invalid Content-Type header", http.StatusBadRequest)
+			writeMultipartResponse(partResponseWriter.Result(), partWriter, contentID)
+			continue
+		}
+
+		content, err := io.ReadAll(part)
+		part.Close()
+		if err != nil {
+			http.Error(partResponseWriter, "unable to process request", http.StatusBadRequest)
+			writeMultipartResponse(partResponseWriter.Result(), partWriter, contentID)
+			continue
+		}
+
+		partRequest, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(content)))
+		if err != nil {
+			http.Error(partResponseWriter, "unable to process request", http.StatusBadRequest)
+			writeMultipartResponse(partResponseWriter.Result(), partWriter, contentID)
+			continue
+		}
+
+		g.Handler(partResponseWriter, partRequest)
+		response := partResponseWriter.Result()
+		response.ContentLength = int64(partResponseWriter.Body.Len())
+		writeMultipartResponse(response, partWriter, contentID)
+	}
+
+	b.Write([]byte("--" + mw.Boundary() + "--"))
+	_, err = b.WriteTo(w)
+	if err != nil {
+		g.gapiError(w, httpStatusCodeOf(err), err.Error())
+	}
 }
 
 func (g *GcsEmu) finishUpload(ctx context.Context, baseUrl HttpBaseUrl, obj *storage.Object, contents []byte, bucket string, conds cloudstorage.Conditions) (*storage.Object, error) {
