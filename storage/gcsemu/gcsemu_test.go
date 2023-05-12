@@ -1,10 +1,8 @@
 package gcsemu
 
 import (
-	"bytes"
 	"context"
 	"crypto/md5"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -16,7 +14,6 @@ import (
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
-	api "google.golang.org/api/storage/v1"
 	"gotest.tools/v3/assert"
 )
 
@@ -376,62 +373,6 @@ func testGenNotMatchDoesntExist(t *testing.T, bh BucketHandle) {
 	w := oh.If(storage.Conditions{GenerationNotMatch: 1}).NewWriter(ctx)
 	err = write(w, "bogus")
 	assert.Equal(t, http.StatusPreconditionFailed, httpStatusCodeOf(err), "wrong error %T: %s", err, err)
-}
-
-func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url string) {
-	const name = "gscemu-test3.txt"
-	ctx := context.Background()
-	oh := bh.Object(name)
-
-	// Create the object.
-	w := oh.NewWriter(ctx)
-	assert.NilError(t, write(w, v1), "failed")
-
-	// Try a raw http get.
-	{
-		u := fmt.Sprintf("%s/download/storage/v1/b/%s/o/%s?alt=media", url, bh.Name, name)
-		t.Logf(u)
-		rsp, err := httpClient.Get(u)
-		assert.NilError(t, err, "failed")
-
-		body, err := ioutil.ReadAll(rsp.Body)
-		assert.NilError(t, err, "failed")
-		assert.Equal(t, http.StatusOK, rsp.StatusCode, "wrong")
-		assert.Equal(t, v1, string(body), "wrong")
-	}
-
-	// Try a raw http metadata get.
-	{
-		u := fmt.Sprintf("%s/storage/v1/b/%s/o/%s", url, bh.Name, name)
-		t.Logf(u)
-		rsp, err := httpClient.Get(u)
-		assert.NilError(t, err, "failed")
-
-		body, err := ioutil.ReadAll(rsp.Body)
-		assert.NilError(t, err, "failed")
-		assert.Equal(t, http.StatusOK, rsp.StatusCode, "wrong")
-
-		var attrs api.Object
-		err = json.NewDecoder(bytes.NewReader(body)).Decode(&attrs)
-		assert.NilError(t, err, "failed")
-		assert.Equal(t, name, attrs.Name, "wrong")
-		assert.Equal(t, bh.Name, attrs.Bucket, "wrong")
-		assert.Equal(t, uint64(len(v1)), attrs.Size, "wrong")
-		assert.Equal(t, int64(1), attrs.Metageneration, "wrong")
-	}
-
-	// Public URL.
-	{
-		u := fmt.Sprintf("%s/%s/%s?alt=media", url, bh.Name, name)
-		t.Logf(u)
-		rsp, err := httpClient.Get(u)
-		assert.NilError(t, err, "failed")
-
-		body, err := ioutil.ReadAll(rsp.Body)
-		assert.NilError(t, err, "failed")
-		assert.Equal(t, http.StatusOK, rsp.StatusCode, "failed")
-		assert.Equal(t, v1, string(body), "wrong")
-	}
 }
 
 func testCopyBasics(t *testing.T, bh BucketHandle) {

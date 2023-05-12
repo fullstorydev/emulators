@@ -142,7 +142,7 @@ func (g *GcsEmu) Handler(w http.ResponseWriter, r *http.Request) {
 		}
 	case "PATCH":
 		alt := r.URL.Query().Get("alt")
-		if alt == "json" {
+		if alt == "json" || r.Header.Get("Content-Type") == "application/json" {
 			g.handleGcsUpdateMetadataRequest(ctx, baseUrl, w, r, bucket, object, conds)
 		} else {
 			// should never happen?
@@ -474,9 +474,36 @@ func (g *GcsEmu) handleGcsNewBucket(ctx context.Context, w http.ResponseWriter, 
 
 func (g *GcsEmu) handleGcsNewObject(ctx context.Context, baseUrl HttpBaseUrl, w http.ResponseWriter, r *http.Request, bucket string, conds cloudstorage.Conditions) {
 	switch r.Form.Get("uploadType") {
-	case "simple":
-		// TODO
-		g.gapiError(w, http.StatusNotImplemented, "not yet implemented")
+	case "media":
+		// simple upload
+		name := r.Form.Get("name")
+		if name == "" {
+			g.gapiError(w, http.StatusBadRequest, "missing object name")
+			return
+		}
+
+		contents, err := io.ReadAll(r.Body)
+		if err != nil {
+			g.gapiError(w, http.StatusBadRequest, "failed to read body")
+			return
+		}
+
+		obj := &storage.Object{
+			Bucket:      bucket,
+			ContentType: r.Header.Get("Content-Type"),
+			Name:        name,
+			Size:        uint64(len(contents)),
+		}
+
+		meta, err := g.finishUpload(ctx, baseUrl, obj, contents, bucket, conds)
+		if err != nil {
+			g.gapiError(w, httpStatusCodeOf(err), err.Error())
+			return
+		}
+
+		w.Header().Set("x-goog-generation", strconv.FormatInt(meta.Generation, 10))
+		w.Header().Set("X-Goog-Metageneration", strconv.FormatInt(meta.Metageneration, 10))
+		g.jsonRespond(w, meta)
 		return
 	case "resumable":
 		var obj storage.Object
@@ -498,25 +525,28 @@ func (g *GcsEmu) handleGcsNewObject(ctx context.Context, baseUrl HttpBaseUrl, w 
 		w.WriteHeader(http.StatusCreated)
 		return
 	case "multipart":
-		// fall through
-		break
-	}
+		obj, contents, err := readMultipartInsert(r)
+		if err != nil {
+			g.gapiError(w, http.StatusBadRequest, fmt.Sprintf("failed to parse request: %s", err))
+			return
+		}
 
-	obj, contents, err := readMultipartInsert(r)
-	if err != nil {
-		g.gapiError(w, http.StatusBadRequest, fmt.Sprintf("failed to parse request: %s", err))
+		meta, err := g.finishUpload(ctx, baseUrl, obj, contents, bucket, conds)
+		if err != nil {
+			g.gapiError(w, httpStatusCodeOf(err), err.Error())
+			return
+		}
+
+		w.Header().Set("x-goog-generation", strconv.FormatInt(meta.Generation, 10))
+		w.Header().Set("X-Goog-Metageneration", strconv.FormatInt(meta.Metageneration, 10))
+		g.jsonRespond(w, meta)
 		return
-	}
-
-	meta, err := g.finishUpload(ctx, baseUrl, obj, contents, bucket, conds)
-	if err != nil {
-		g.gapiError(w, httpStatusCodeOf(err), err.Error())
+	default:
+		// TODO
+		g.gapiError(w, http.StatusNotImplemented, "not yet implemented")
 		return
-	}
 
-	w.Header().Set("x-goog-generation", strconv.FormatInt(meta.Generation, 10))
-	w.Header().Set("X-Goog-Metageneration", strconv.FormatInt(meta.Metageneration, 10))
-	g.jsonRespond(w, meta)
+	}
 }
 
 func (g *GcsEmu) handleGcsNewObjectResume(ctx context.Context, baseUrl HttpBaseUrl, w http.ResponseWriter, r *http.Request, id string) {
