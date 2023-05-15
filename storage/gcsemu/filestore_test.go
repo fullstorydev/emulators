@@ -20,6 +20,7 @@ func TestFileStore(t *testing.T) {
 		Store:   NewFileStore(gcsDir),
 		Verbose: true,
 		Log: func(err error, fmt string, args ...interface{}) {
+			t.Helper()
 			if err != nil {
 				fmt = "ERROR: " + fmt + ": %s"
 				args = append(args, err)
