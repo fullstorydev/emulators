@@ -162,14 +162,10 @@ func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url str
 
 	// Batch requests don't support upload and download, only metadata stuff.
 	t.Run("batch", func(t *testing.T) {
-		if url != "https://storage.googleapis.com" {
-			t.Skip("TODO: implement batch endpoint")
-		}
-
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
 
-		// Only use the first 3.
+		// Only use the second and third requests.
 		batchTcs := tcs[1:3]
 		for i, tc := range batchTcs {
 			req := tc.makeRequest(t)
@@ -192,11 +188,15 @@ func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url str
 		assert.NilError(t, err)
 		req.Header.Set("Content-Type", "multipart/mixed; boundary="+w.Boundary())
 
+		body, err := httputil.DumpRequest(req, true)
+		assert.NilError(t, err)
+		t.Log(string(body))
+
 		rsp, err := httpClient.Do(req)
 		assert.NilError(t, err)
 		assert.Equal(t, http.StatusOK, rsp.StatusCode)
 
-		body, err := httputil.DumpResponse(rsp, true)
+		body, err = httputil.DumpResponse(rsp, true)
 		assert.NilError(t, err)
 		t.Log(string(body))
 
