@@ -35,10 +35,6 @@ func (g *GcsEmu) BatchHandler(w http.ResponseWriter, r *http.Request) {
 			g.gapiError(w, http.StatusBadRequest, fmt.Sprintf("Content-Type: want=application/http, got=%s", ct))
 			return
 		}
-		if cte := part.Header.Get("Content-Transfer-Encoding"); cte != "binary" {
-			g.gapiError(w, http.StatusBadRequest, fmt.Sprintf("Content-Transfer-Encoding: want=binary, got=%s", cte))
-			return
-		}
 
 		contentId := part.Header.Get("Content-ID")
 
