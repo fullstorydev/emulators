@@ -59,6 +59,9 @@ func (g *GcsEmu) BatchHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			req.Body, _ = req.GetBody()
 		}
+		if cte := part.Header.Get("Content-Transfer-Encoding"); cte != "" {
+			req.Header.Set("Transfer-Encoding", cte)
+		}
 		// encoded requests don't include a host, so patch it up from the incoming request
 		req.Host = r.Host
 		reqs = append(reqs, req)
