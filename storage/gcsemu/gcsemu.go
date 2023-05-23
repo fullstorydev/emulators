@@ -74,6 +74,7 @@ func lockName(bucket string, filename string) string {
 // Register the emulator's HTTP handlers on the given mux.
 func (g *GcsEmu) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/", DrainRequestHandler(GzipRequestHandler(g.Handler)))
+	mux.HandleFunc("/batch/storage/v1", DrainRequestHandler(GzipRequestHandler(g.BatchHandler)))
 }
 
 // Handler handles emulated GCS http requests for "storage.googleapis.com".
