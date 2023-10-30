@@ -21,6 +21,8 @@ import (
 func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url string) {
 	const name = "gscemu-test3.txt"
 	const name2 = "gscemu-test4.txt"
+	const delName = "gscemu-test-deletion.txt"    // used for successful deletion
+	const delName2 = "gscemu-test-deletion-2.txt" // used for not found deletion
 
 	expectMetaGen := int64(1)
 	tcs := []struct {
@@ -95,6 +97,34 @@ func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url str
 			},
 		},
 		{
+			name: "rawDeleteSuccess",
+			makeRequest: func(t *testing.T) *http.Request {
+				u := fmt.Sprintf("%s/upload/storage/v1/b/%s/o/%s", url, bh.Name, delName)
+				t.Logf(u)
+				req, err := http.NewRequest("DELETE", u, nil)
+				assert.NilError(t, err)
+				req.Header.Set("Content-Type", "text/plain")
+				return req
+			},
+			checkResponse: func(t *testing.T, rsp *http.Response) {
+				assert.Equal(t, http.StatusOK, rsp.StatusCode)
+			},
+		},
+		{
+			name: "rawDeleteNotFound",
+			makeRequest: func(t *testing.T) *http.Request {
+				u := fmt.Sprintf("%s/upload/storage/v1/b/%s/o/%s", url, bh.Name, delName2)
+				t.Logf(u)
+				req, err := http.NewRequest("DELETE", u, nil)
+				assert.NilError(t, err)
+				req.Header.Set("Content-Type", "text/plain")
+				return req
+			},
+			checkResponse: func(t *testing.T, rsp *http.Response) {
+				assert.Equal(t, http.StatusNotFound, rsp.StatusCode)
+			},
+		},
+		{
 			name: "rawUpload",
 			makeRequest: func(t *testing.T) *http.Request {
 				u := fmt.Sprintf("%s/upload/storage/v1/b/%s/o?uploadType=media&name=%s", url, bh.Name, name2)
@@ -146,6 +176,13 @@ func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url str
 	// Make sure object 2 is not there.
 	_ = bh.Object(name2).Delete(ctx)
 
+	// batch setup
+	// Create the object for successful deletion.
+	w = bh.Object(delName).NewWriter(ctx)
+	assert.NilError(t, write(w, v1))
+	// Make sure object for not found deletion is not there.
+	_ = bh.Object(delName2).Delete(ctx)
+
 	// Run each test individually.
 	for _, tc := range tcs {
 		tc := tc
@@ -160,13 +197,20 @@ func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url str
 		})
 	}
 
+	// batch setup again for batch deletion step
+	// Create the object for successful deletion.
+	w = bh.Object(delName).NewWriter(ctx)
+	assert.NilError(t, write(w, v1))
+	// Make sure object for not found deletion is not there.
+	_ = bh.Object(delName2).Delete(ctx)
+
 	// Batch requests don't support upload and download, only metadata stuff.
 	t.Run("batch", func(t *testing.T) {
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
 
-		// Only use the second and third requests.
-		batchTcs := tcs[1:3]
+		// Only use the [second, fifth] requests.
+		batchTcs := tcs[1:5]
 		for i, tc := range batchTcs {
 			req := tc.makeRequest(t)
 			req.Host = ""
