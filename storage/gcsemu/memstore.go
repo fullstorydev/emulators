@@ -155,7 +155,10 @@ func (ms *memstore) Delete(bucket string, filename string) error {
 		// Remove just the file
 		b.mu.Lock()
 		defer b.mu.Unlock()
-		b.files.Delete(ms.key(filename))
+		if b.files.Delete(ms.key(filename)) == nil {
+			// case file does not exist
+			return os.ErrNotExist
+		}
 	}
 
 	return nil
