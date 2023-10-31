@@ -139,7 +139,7 @@ func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url str
 			},
 		},
 		{
-			name: "rawDeleteBucket",
+			name: "rawDeleteBucket-BucketNotFound",
 			makeRequest: func(t *testing.T) *http.Request {
 				u := fmt.Sprintf("%s/storage/v1/b/%s", url, invalidBucketName)
 				t.Logf(u)
