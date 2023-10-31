@@ -592,20 +592,3 @@ func write(w *storage.Writer, content string) error {
 	}
 	return w.Close()
 }
-
-func testDeleteBucket(t *testing.T, gcsClient *storage.Client) {
-	ctx := context.Background()
-
-	bh := BucketHandle{
-		Name:         invalidBucketName,
-		BucketHandle: gcsClient.Bucket(invalidBucketName),
-	}
-
-	err := bh.Delete(ctx)
-	assert.Equal(t, http.StatusNotFound, err.(*googleapi.Error).Code)
-
-	initBucket(t, bh)
-
-	err = bh.Delete(ctx)
-	assert.NilError(t, err)
-}

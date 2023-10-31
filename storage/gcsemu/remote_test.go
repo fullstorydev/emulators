@@ -33,7 +33,6 @@ func TestRealStore(t *testing.T) {
 	assert.NilError(t, err)
 
 	t.Parallel()
-
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {

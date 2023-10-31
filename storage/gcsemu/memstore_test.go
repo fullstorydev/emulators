@@ -42,7 +42,6 @@ func TestMemStore(t *testing.T) {
 	}
 
 	t.Parallel()
-
 	initBucket(t, bh)
 	for _, tc := range testCases {
 		tc := tc
