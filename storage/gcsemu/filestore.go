@@ -155,6 +155,11 @@ func (fs *filestore) Delete(bucket string, filename string) error {
 	f := fs.filename(bucket, filename)
 
 	err := func() error {
+		// Check if the bucket exists
+		if _, err := os.Stat(f); os.IsNotExist(err) {
+			return os.ErrNotExist
+		}
+
 		// Remove the bucket
 		if filename == "" {
 			return os.RemoveAll(f)

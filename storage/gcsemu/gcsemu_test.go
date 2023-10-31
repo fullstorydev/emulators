@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	testCases = []struct {
+	objectTestCases = []struct {
 		name string
 		f    func(t *testing.T, bh BucketHandle)
 	}{
@@ -33,6 +33,13 @@ var (
 		{"Compose", testCompose},
 		{"CopyMetadata", testCopyMetadata},
 		{"CopyConditionals", testCopyConditionals},
+	}
+
+	bucketTestCases = []struct {
+		name string
+		f    func(t *testing.T, gcsClient *storage.Client)
+	}{
+		{"Delete", testDeleteBucket},
 	}
 )
 
@@ -587,4 +594,21 @@ func write(w *storage.Writer, content string) error {
 		panic("not all content sent")
 	}
 	return w.Close()
+}
+
+func testDeleteBucket(t *testing.T, gcsClient *storage.Client) {
+	ctx := context.Background()
+
+	bh := BucketHandle{
+		Name:         "fullstory-non-existant-bucket",
+		BucketHandle: gcsClient.Bucket("fullstory-non-existant-bucket"),
+	}
+
+	err := bh.Delete(ctx)
+	assert.Equal(t, http.StatusNotFound, err.(*googleapi.Error).Code)
+
+	initBucket(t, bh)
+
+	err = bh.Delete(ctx)
+	assert.NilError(t, err)
 }

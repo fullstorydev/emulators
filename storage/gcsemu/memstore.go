@@ -149,6 +149,10 @@ func (ms *memstore) Copy(srcBucket string, srcFile string, dstBucket string, dst
 
 func (ms *memstore) Delete(bucket string, filename string) error {
 	if filename == "" {
+		if _, ok := ms.buckets[bucket]; !ok {
+			return os.ErrNotExist
+		}
+
 		// Remove the bucket
 		delete(ms.buckets, bucket)
 	} else if b := ms.getBucket(bucket); b != nil {
