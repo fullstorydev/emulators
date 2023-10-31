@@ -149,11 +149,13 @@ func (ms *memstore) Copy(srcBucket string, srcFile string, dstBucket string, dst
 
 func (ms *memstore) Delete(bucket string, filename string) error {
 	if filename == "" {
+		// Remove the bucket
+		ms.mu.Lock()
+		defer ms.mu.Unlock()
 		if _, ok := ms.buckets[bucket]; !ok {
 			return os.ErrNotExist
 		}
 
-		// Remove the bucket
 		delete(ms.buckets, bucket)
 	} else if b := ms.getBucket(bucket); b != nil {
 		// Remove just the file
@@ -163,6 +165,8 @@ func (ms *memstore) Delete(bucket string, filename string) error {
 			// case file does not exist
 			return os.ErrNotExist
 		}
+	} else {
+		return os.ErrNotExist
 	}
 
 	return nil

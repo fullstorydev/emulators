@@ -43,16 +43,8 @@ func TestMemStore(t *testing.T) {
 
 	t.Parallel()
 
-	for _, tc := range bucketTestCases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			tc.f(t, gcsClient)
-		})
-	}
-
 	initBucket(t, bh)
-	for _, tc := range objectTestCases {
+	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

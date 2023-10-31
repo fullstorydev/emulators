@@ -34,16 +34,7 @@ func TestRealStore(t *testing.T) {
 
 	t.Parallel()
 
-	// these tests are not applicable to real storage
-	//for _, tc := range bucketTestCases {
-	//	tc := tc
-	//	t.Run(tc.name, func(t *testing.T) {
-	//		t.Parallel()
-	//		tc.f(t, gcsClient)
-	//	})
-	//}
-
-	for _, tc := range objectTestCases {
+	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

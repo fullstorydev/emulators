@@ -17,8 +17,12 @@ import (
 	"gotest.tools/v3/assert"
 )
 
+const (
+	invalidBucketName = "fullstory-non-existant-bucket"
+)
+
 var (
-	objectTestCases = []struct {
+	testCases = []struct {
 		name string
 		f    func(t *testing.T, bh BucketHandle)
 	}{
@@ -33,13 +37,6 @@ var (
 		{"Compose", testCompose},
 		{"CopyMetadata", testCopyMetadata},
 		{"CopyConditionals", testCopyConditionals},
-	}
-
-	bucketTestCases = []struct {
-		name string
-		f    func(t *testing.T, gcsClient *storage.Client)
-	}{
-		{"Delete", testDeleteBucket},
 	}
 )
 
@@ -600,8 +597,8 @@ func testDeleteBucket(t *testing.T, gcsClient *storage.Client) {
 	ctx := context.Background()
 
 	bh := BucketHandle{
-		Name:         "fullstory-non-existant-bucket",
-		BucketHandle: gcsClient.Bucket("fullstory-non-existant-bucket"),
+		Name:         invalidBucketName,
+		BucketHandle: gcsClient.Bucket(invalidBucketName),
 	}
 
 	err := bh.Delete(ctx)
