@@ -17,6 +17,10 @@ import (
 	"gotest.tools/v3/assert"
 )
 
+const (
+	invalidBucketName = "fullstory-non-existant-bucket"
+)
+
 var (
 	testCases = []struct {
 		name string

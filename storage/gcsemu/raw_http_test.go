@@ -97,9 +97,9 @@ func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url str
 			},
 		},
 		{
-			name: "rawDeleteSuccess",
+			name: "rawDeleteObject-Success",
 			makeRequest: func(t *testing.T) *http.Request {
-				u := fmt.Sprintf("%s/upload/storage/v1/b/%s/o/%s", url, bh.Name, delName)
+				u := fmt.Sprintf("%s/storage/v1/b/%s/o/%s", url, bh.Name, delName)
 				t.Logf(u)
 				req, err := http.NewRequest("DELETE", u, nil)
 				assert.NilError(t, err)
@@ -111,9 +111,37 @@ func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url str
 			},
 		},
 		{
-			name: "rawDeleteNotFound",
+			name: "rawDeleteObject-ObjectNotFound",
 			makeRequest: func(t *testing.T) *http.Request {
-				u := fmt.Sprintf("%s/upload/storage/v1/b/%s/o/%s", url, bh.Name, delName2)
+				u := fmt.Sprintf("%s/storage/v1/b/%s/o/%s", url, bh.Name, delName2)
+				t.Logf(u)
+				req, err := http.NewRequest("DELETE", u, nil)
+				assert.NilError(t, err)
+				req.Header.Set("Content-Type", "text/plain")
+				return req
+			},
+			checkResponse: func(t *testing.T, rsp *http.Response) {
+				assert.Equal(t, http.StatusNotFound, rsp.StatusCode)
+			},
+		},
+		{
+			name: "rawDeleteObject-BucketNotFound",
+			makeRequest: func(t *testing.T) *http.Request {
+				u := fmt.Sprintf("%s/storage/v1/b/%s/o/%s", url, invalidBucketName, delName)
+				t.Logf(u)
+				req, err := http.NewRequest("DELETE", u, nil)
+				assert.NilError(t, err)
+				req.Header.Set("Content-Type", "text/plain")
+				return req
+			},
+			checkResponse: func(t *testing.T, rsp *http.Response) {
+				assert.Equal(t, http.StatusNotFound, rsp.StatusCode)
+			},
+		},
+		{
+			name: "rawDeleteBucket-BucketNotFound",
+			makeRequest: func(t *testing.T) *http.Request {
+				u := fmt.Sprintf("%s/storage/v1/b/%s", url, invalidBucketName)
 				t.Logf(u)
 				req, err := http.NewRequest("DELETE", u, nil)
 				assert.NilError(t, err)
@@ -210,7 +238,7 @@ func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url str
 		w := multipart.NewWriter(&buf)
 
 		// Only use the [second, fifth] requests.
-		batchTcs := tcs[1:5]
+		batchTcs := tcs[1:6]
 		for i, tc := range batchTcs {
 			req := tc.makeRequest(t)
 			req.Host = ""
