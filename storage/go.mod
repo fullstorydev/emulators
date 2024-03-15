@@ -8,7 +8,7 @@ require (
 	github.com/bluele/gcache v0.0.2
 	github.com/google/btree v1.0.1
 	golang.org/x/oauth2 v0.0.0-20210514164344-f6687ab2804c
-	golang.org/x/sys v0.0.0-20210603125802-9665404d3644 // indirect
+	golang.org/x/sys v0.1.0 // indirect
 	google.golang.org/api v0.47.0
 	google.golang.org/protobuf v1.33.0
 	gotest.tools/v3 v3.0.3
