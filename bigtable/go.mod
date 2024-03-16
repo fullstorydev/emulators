@@ -4,6 +4,7 @@ go 1.15
 
 require (
 	cloud.google.com/go/bigtable v1.10.1
+	cloud.google.com/go/iam v0.13.0
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.3
 	github.com/google/btree v1.0.1
