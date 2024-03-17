@@ -17,8 +17,8 @@ package bttest
 import (
 	"context"
 
+	iampb "cloud.google.com/go/iam/apiv1/iampb"
 	btapb "google.golang.org/genproto/googleapis/bigtable/admin/v2"
-	iampb "google.golang.org/genproto/googleapis/iam/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
