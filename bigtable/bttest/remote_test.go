@@ -77,7 +77,8 @@ func TestRemote(t *testing.T) {
 
 func newClientPool(ctx context.Context) (grpc.ClientConnInterface, error) {
 	o := []option.ClientOption{
-		internaloption.WithDefaultEndpoint("bigtable.googleapis.com:443"),
+		internaloption.WithDefaultEndpointTemplate("bigtable.UNIVERSE_DOMAIN:443"),
+		internaloption.WithDefaultUniverseDomain("googleapis.com"),
 		internaloption.WithDefaultMTLSEndpoint("bigtable.mtls.googleapis.com:443"),
 		option.WithScopes(bigtable.Scope),
 		option.WithUserAgent("cbt-go/v1.6.0"),
@@ -93,7 +94,8 @@ func newClientPool(ctx context.Context) (grpc.ClientConnInterface, error) {
 
 func newAdminPool(ctx context.Context) (grpc.ClientConnInterface, error) {
 	o := []option.ClientOption{
-		internaloption.WithDefaultEndpoint("bigtableadmin.googleapis.com:443"),
+		internaloption.WithDefaultEndpointTemplate("bigtableadmin.UNIVERSE_DOMAIN:443"),
+		internaloption.WithDefaultUniverseDomain("googleapis.com"),
 		internaloption.WithDefaultMTLSEndpoint("bigtableadmin.mtls.googleapis.com:443"),
 		option.WithScopes(bigtable.AdminScope),
 		option.WithUserAgent("cbt-go/v1.6.0"),
