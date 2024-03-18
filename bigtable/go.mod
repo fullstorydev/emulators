@@ -3,15 +3,15 @@ module github.com/fullstorydev/emulators/bigtable
 go 1.18
 
 require (
-	cloud.google.com/go/bigtable v1.10.1
+	cloud.google.com/go/bigtable v1.22.0
 	cloud.google.com/go/iam v1.1.6
 	github.com/golang/protobuf v1.5.3
-	github.com/google/btree v1.0.1
+	github.com/google/btree v1.1.2
 	github.com/google/go-cmp v0.6.0
 	github.com/syndtr/goleveldb v1.0.0
 	golang.org/x/sync v0.6.0
 	google.golang.org/api v0.170.0
-	google.golang.org/genproto v0.0.0-20240205150955-31a09d347014
+	google.golang.org/genproto v0.0.0-20240308144416-29370a3891b7
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240311132316-a219d84964c2
 	google.golang.org/grpc v1.62.1
 	google.golang.org/protobuf v1.33.0
@@ -19,10 +19,16 @@ require (
 )
 
 require (
-	cloud.google.com/go v0.112.0 // indirect
-	cloud.google.com/go/compute v1.23.4 // indirect
+	cloud.google.com/go v0.112.1 // indirect
+	cloud.google.com/go/compute v1.24.0 // indirect
 	cloud.google.com/go/compute/metadata v0.2.3 // indirect
 	cloud.google.com/go/longrunning v0.5.5 // indirect
+	github.com/census-instrumentation/opencensus-proto v0.4.1 // indirect
+	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/cncf/udpa/go v0.0.0-20220112060539-c52dc94e7fbe // indirect
+	github.com/cncf/xds/go v0.0.0-20231128003011-0fa0005c9caa // indirect
+	github.com/envoyproxy/go-control-plane v0.12.0 // indirect
+	github.com/envoyproxy/protoc-gen-validate v1.0.4 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -45,5 +51,5 @@ require (
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20240205150955-31a09d347014 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20240228224816-df926f6c8641 // indirect
 )
