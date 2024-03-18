@@ -4,8 +4,8 @@ go 1.18
 
 require (
 	cloud.google.com/go/bigtable v1.22.0
-	cloud.google.com/go/iam v1.1.6
-	github.com/golang/protobuf v1.5.3
+	cloud.google.com/go/iam v1.1.7
+	github.com/golang/protobuf v1.5.4
 	github.com/google/btree v1.1.2
 	github.com/google/go-cmp v0.6.0
 	github.com/syndtr/goleveldb v1.0.0
@@ -51,5 +51,5 @@ require (
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20240228224816-df926f6c8641 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20240311132316-a219d84964c2 // indirect
 )
