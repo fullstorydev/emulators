@@ -10,9 +10,9 @@ require (
 	github.com/google/go-cmp v0.6.0
 	github.com/syndtr/goleveldb v1.0.0
 	golang.org/x/sync v0.6.0
-	google.golang.org/api v0.170.0
+	google.golang.org/api v0.171.0
 	google.golang.org/genproto v0.0.0-20240308144416-29370a3891b7
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240311132316-a219d84964c2
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240314234333-6e1732d8331c
 	google.golang.org/grpc v1.62.1
 	google.golang.org/protobuf v1.33.0
 	rsc.io/binaryregexp v0.2.0
@@ -37,7 +37,7 @@ require (
 	github.com/google/s2a-go v0.1.7 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
-	github.com/googleapis/gax-go/v2 v2.12.2 // indirect
+	github.com/googleapis/gax-go/v2 v2.12.3 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.49.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0 // indirect
