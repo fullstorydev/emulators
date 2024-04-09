@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/fullstorydev/emulators/storage/gcsemu"
-	"github.com/testcontainers/testcontainers-go"
 )
 
 func TestLocalServer(t *testing.T) {
@@ -64,7 +63,7 @@ func validateServer(srvAddr string) error {
 	os.Setenv("GCS_EMULATOR_HOST", srvAddr)
 
 	ctx := context.Background()
-	fileContent := "FullStory\n" +
+	fileContent := "Fullstory\n" +
 		"Google Cloud Storage Emulator\n" +
 		"Gophers!\n"
 
