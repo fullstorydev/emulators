@@ -3,7 +3,7 @@ High quality Google Cloud service emulators for local development stacks
 
 ## Why?
 
-At FullStory, our entire product and backend software stack runs in each engineer's local workstation. This high-quality local development experience keeps our engineers happy and productive, because they are able to:
+At Fullstory, our entire product and backend software stack runs in each engineer's local workstation. This high-quality local development experience keeps our engineers happy and productive, because they are able to:
 
 - build and test features locally
 - reproduce and fix bugs quickly and easily

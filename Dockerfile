@@ -1,5 +1,5 @@
 FROM golang:1.17-alpine As builder
-MAINTAINER FullStory Engineering
+MAINTAINER Fullstory Engineering
 
 # create non-privileged group and user
 RUN addgroup -S emulators && adduser -S emulators -G emulators
