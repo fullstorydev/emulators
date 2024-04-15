@@ -8,7 +8,7 @@ require (
 	github.com/fullstorydev/emulators/storage v0.0.0
 	github.com/testcontainers/testcontainers-go v0.30.0
 	google.golang.org/api v0.172.0
-	google.golang.org/grpc v1.63.0
+	google.golang.org/grpc v1.63.2
 )
 
 require (
