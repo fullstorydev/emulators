@@ -1,8 +1,6 @@
 module github.com/fullstorydev/emulators/examples
 
-go 1.21
-
-toolchain go1.21.6
+go 1.18
 
 require (
 	cloud.google.com/go/bigtable v1.23.0
@@ -90,7 +88,7 @@ require (
 	google.golang.org/genproto v0.0.0-20240401170217-c3f982113cda // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240415180920-8c6c420018be // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240429193739-8cf5692501f6 // indirect
-	google.golang.org/protobuf v1.34.1 // indirect
+	google.golang.org/protobuf v1.34.0 // indirect
 	rsc.io/binaryregexp v0.2.0 // indirect
 )
 
