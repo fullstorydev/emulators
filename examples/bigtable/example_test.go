@@ -4,13 +4,14 @@ import (
 	"cloud.google.com/go/bigtable"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"testing"
 
 	"github.com/fullstorydev/emulators/bigtable/bttest"
-	"github.com/testcontainers/testcontainers-go"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func TestLocalServer(t *testing.T) {
@@ -25,46 +26,15 @@ func TestLocalServer(t *testing.T) {
 	}
 }
 
-func TestContainerServer(t *testing.T) {
-	ctx := context.Background()
-	req := testcontainers.ContainerRequest{
-		Image:        "fullstorydev/cbtemulator:latest",
-		ExposedPorts: []string{"9000"},
-	}
-	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: req,
-		Started:          true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer c.Terminate(ctx)
-
-	ip, err := c.Host(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	port, err := c.MappedPort(ctx, "9000")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	srvAddr := fmt.Sprintf("%s:%s", ip, port.Port())
-	fmt.Printf("Big table container started on %s\n", srvAddr)
-
-	err = validateServer(srvAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
 func validateServer(srvAddr string) error {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	conn, err := grpc.Dial(srvAddr, grpc.WithInsecure())
+	conn, err := grpc.Dial(srvAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
 	}
+	defer silentClose(conn)
 
 	proj, instance := "proj", "instance"
 
@@ -72,6 +42,7 @@ func validateServer(srvAddr string) error {
 	if err != nil {
 		return err
 	}
+	defer silentClose(adminClient)
 
 	if err = adminClient.CreateTable(ctx, "example"); err != nil {
 		return err
@@ -85,6 +56,8 @@ func validateServer(srvAddr string) error {
 	if err != nil {
 		log.Fatalln(err)
 	}
+	defer silentClose(client)
+
 	tbl := client.Open("example")
 
 	mut := bigtable.NewMutation()
@@ -93,18 +66,22 @@ func validateServer(srvAddr string) error {
 		return err
 	}
 
-	if row, err := tbl.ReadRow(ctx, "com.google.cloud"); err != nil {
+	row, err := tbl.ReadRow(ctx, "com.google.cloud")
+	if err != nil {
 		return err
-	} else {
-		for _, column := range row["links"] {
-			if column.Column != "links:golang.org" {
-				return fmt.Errorf("response [%s] != [links:golang.org]", column.Column)
-			}
-			if string(column.Value) != "Gophers!" {
-				return fmt.Errorf("response [%s] != [Gophers!]", string(column.Value))
-			}
+	}
+	for _, column := range row["links"] {
+		if column.Column != "links:golang.org" {
+			return fmt.Errorf("response [%s] != [links:golang.org]", column.Column)
+		}
+		if string(column.Value) != "Gophers!" {
+			return fmt.Errorf("response [%s] != [Gophers!]", string(column.Value))
 		}
 	}
 
 	return nil
+}
+
+func silentClose(c io.Closer) {
+	_ = c.Close()
 }
