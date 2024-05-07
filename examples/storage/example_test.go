@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/fullstorydev/emulators/storage/gcsemu"
+	testcontainers "github.com/testcontainers/testcontainers-go"
 )
 
 func TestLocalServer(t *testing.T) {
@@ -26,6 +26,10 @@ func TestLocalServer(t *testing.T) {
 }
 
 func TestContainerServer(t *testing.T) {
+	if os.Getenv("TEST_CONTAINER") == "" {
+		t.Skip("define TEST_CONTAINER to test containers")
+	}
+
 	ctx := context.Background()
 	req := testcontainers.ContainerRequest{
 		Image:        "fullstorydev/gcsemulator:latest",
@@ -90,7 +94,7 @@ func validateServer(srvAddr string) error {
 		return err
 	}
 
-	res, err := ioutil.ReadAll(reader)
+	res, err := io.ReadAll(reader)
 	if err != nil {
 		return err
 	}

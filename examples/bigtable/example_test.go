@@ -5,12 +5,14 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"testing"
 
 	"github.com/fullstorydev/emulators/bigtable/bttest"
-	"github.com/testcontainers/testcontainers-go"
+	testcontainers "github.com/testcontainers/testcontainers-go"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func TestLocalServer(t *testing.T) {
@@ -26,6 +28,9 @@ func TestLocalServer(t *testing.T) {
 }
 
 func TestContainerServer(t *testing.T) {
+	if os.Getenv("TEST_CONTAINER") == "" {
+		t.Skip("define TEST_CONTAINER to test containers")
+	}
 	ctx := context.Background()
 	req := testcontainers.ContainerRequest{
 		Image:        "fullstorydev/cbtemulator:latest",
@@ -61,7 +66,7 @@ func TestContainerServer(t *testing.T) {
 func validateServer(srvAddr string) error {
 	ctx := context.Background()
 
-	conn, err := grpc.Dial(srvAddr, grpc.WithInsecure())
+	conn, err := grpc.Dial(srvAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
 	}
@@ -93,16 +98,16 @@ func validateServer(srvAddr string) error {
 		return err
 	}
 
-	if row, err := tbl.ReadRow(ctx, "com.google.cloud"); err != nil {
+	row, err := tbl.ReadRow(ctx, "com.google.cloud")
+	if err != nil {
 		return err
-	} else {
-		for _, column := range row["links"] {
-			if column.Column != "links:golang.org" {
-				return fmt.Errorf("response [%s] != [links:golang.org]", column.Column)
-			}
-			if string(column.Value) != "Gophers!" {
-				return fmt.Errorf("response [%s] != [Gophers!]", string(column.Value))
-			}
+	}
+	for _, column := range row["links"] {
+		if column.Column != "links:golang.org" {
+			return fmt.Errorf("response [%s] != [links:golang.org]", column.Column)
+		}
+		if string(column.Value) != "Gophers!" {
+			return fmt.Errorf("response [%s] != [Gophers!]", string(column.Value))
 		}
 	}
 
