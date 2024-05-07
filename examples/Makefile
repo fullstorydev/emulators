@@ -1,5 +1,3 @@
-dev_build_version=$(shell git describe --tags --always --dirty)
-
 .PHONY: ci
 ci: deps checkgofmt vet staticcheck ineffassign predeclared golint errcheck test
 
@@ -53,17 +51,3 @@ errcheck:
 test:
 	go test -race ./...
 
-.PHONY: install
-install:
-	go install -ldflags '-X "main.version=dev build $(dev_build_version)"' ./...
-
-.PHONY: release
-release:
-	@go install github.com/goreleaser/goreleaser@v0.134.0
-	goreleaser --rm-dist
-
-.PHONY: docker
-docker:
-	@echo $(dev_build_version) > VERSION
-	docker build --target=cbtemulator -t fullstorydev/cbtemulator:$(dev_build_version) ..
-	@rm VERSION
