@@ -6,7 +6,7 @@ require (
 	cloud.google.com/go/storage v1.40.0
 	github.com/bluele/gcache v0.0.2
 	github.com/google/btree v1.1.2
-	golang.org/x/oauth2 v0.19.0
+	golang.org/x/oauth2 v0.20.0
 	google.golang.org/api v0.177.0
 	google.golang.org/protobuf v1.34.1
 	gotest.tools/v3 v3.5.1
