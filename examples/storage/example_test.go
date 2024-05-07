@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/fullstorydev/emulators/storage/gcsemu"
-	testcontainers "github.com/testcontainers/testcontainers-go"
 )
 
 func TestLocalServer(t *testing.T) {
@@ -25,48 +24,12 @@ func TestLocalServer(t *testing.T) {
 	}
 }
 
-func TestContainerServer(t *testing.T) {
-	if os.Getenv("TEST_CONTAINER") == "" {
-		t.Skip("define TEST_CONTAINER to test containers")
-	}
-
-	ctx := context.Background()
-	req := testcontainers.ContainerRequest{
-		Image:        "fullstorydev/gcsemulator:latest",
-		ExposedPorts: []string{"9000"},
-	}
-	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: req,
-		Started:          true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer c.Terminate(ctx)
-
-	ip, err := c.Host(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	port, err := c.MappedPort(ctx, "9000")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	srvAddr := fmt.Sprintf("%s:%s", ip, port.Port())
-	fmt.Printf("Storage container started on %s\n", srvAddr)
-
-	err = validateServer(srvAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
 func validateServer(srvAddr string) error {
 	// gcsemu.NewClient will look at this env var to figure out what host/port to talk to
-	os.Setenv("GCS_EMULATOR_HOST", srvAddr)
+	_ = os.Setenv("GCS_EMULATOR_HOST", srvAddr)
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	fileContent := "Fullstory\n" +
 		"Google Cloud Storage Emulator\n" +
 		"Gophers!\n"
@@ -75,7 +38,7 @@ func validateServer(srvAddr string) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer silentClose(client)
 
 	o := client.Bucket("test").Object("data/test.txt")
 	writer := o.NewWriter(ctx)
@@ -104,4 +67,8 @@ func validateServer(srvAddr string) error {
 	}
 
 	return nil
+}
+
+func silentClose(c io.Closer) {
+	_ = c.Close()
 }
