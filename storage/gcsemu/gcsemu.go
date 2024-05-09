@@ -165,6 +165,13 @@ func (g *GcsEmu) Handler(w http.ResponseWriter, r *http.Request) {
 			// unsupported method, or maybe should never happen
 			g.gapiError(w, http.StatusBadRequest, fmt.Sprintf("unsupported POST request: %v\n%s", r.URL, maybeNotImplementedErrorMsg))
 		}
+	case "PUT":
+		if r.Form.Get("upload_id") != "" {
+			g.handleGcsNewObjectResume(ctx, baseUrl, w, r, r.Form.Get("upload_id"))
+		} else {
+			// unsupported method, or maybe should never happen
+			g.gapiError(w, http.StatusBadRequest, fmt.Sprintf("unsupported PUT request: %v\n%s", r.URL, maybeNotImplementedErrorMsg))
+		}
 	default:
 		g.gapiError(w, http.StatusMethodNotAllowed, "")
 	}
