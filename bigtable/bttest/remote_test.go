@@ -84,7 +84,6 @@ func newClientPool(ctx context.Context) (grpc.ClientConnInterface, error) {
 		option.WithUserAgent("cbt-go/v1.6.0"),
 		option.WithGRPCConnectionPool(4),
 		option.WithGRPCDialOption(grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(1<<28), grpc.MaxCallRecvMsgSize(1<<28))),
-		option.WithGRPCDialOption(grpc.WithBlock()),
 	}
 	// Attempts direct access to spanner service over gRPC to improve throughput,
 	// whether the attempt is allowed is totally controlled by service owner.
@@ -100,7 +99,6 @@ func newAdminPool(ctx context.Context) (grpc.ClientConnInterface, error) {
 		option.WithScopes(bigtable.AdminScope),
 		option.WithUserAgent("cbt-go/v1.6.0"),
 		option.WithGRPCConnectionPool(4),
-		option.WithGRPCDialOption(grpc.WithBlock()),
 	}
 	o = append(o, option.WithScopes(bigtableadmin.CloudPlatformScope))
 	return gtransport.DialPool(ctx, o...)

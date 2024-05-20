@@ -30,7 +30,7 @@ func validateServer(srvAddr string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	conn, err := grpc.Dial(srvAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(srvAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
 	}
