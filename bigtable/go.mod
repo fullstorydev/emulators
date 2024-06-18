@@ -3,7 +3,7 @@ module github.com/fullstorydev/emulators/bigtable
 go 1.18
 
 require (
-	cloud.google.com/go/bigtable v1.23.0
+	cloud.google.com/go/bigtable v1.24.0
 	cloud.google.com/go/iam v1.1.8
 	github.com/golang/protobuf v1.5.4
 	github.com/google/btree v1.1.2
