@@ -50,7 +50,7 @@ errcheck:
 	errcheck ./...
 
 .PHONY: test
-test:
+test: deps
 	go test -race ./...
 
 .PHONY: install
@@ -67,4 +67,3 @@ docker:
 	@echo $(dev_build_version) > VERSION
 	docker build --target=gcsemulator -t fullstorydev/gcsemulator:$(dev_build_version) ..
 	@rm VERSION
-

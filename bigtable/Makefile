@@ -50,7 +50,7 @@ errcheck:
 	errcheck ./...
 
 .PHONY: test
-test:
+test: deps
 	go test -race ./...
 
 .PHONY: install
