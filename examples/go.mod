@@ -7,21 +7,22 @@ require (
 	github.com/fullstorydev/emulators/bigtable v0.0.0
 	github.com/fullstorydev/emulators/storage v0.0.0
 	google.golang.org/api v0.188.0
-	google.golang.org/grpc v1.64.1
+	google.golang.org/grpc v1.65.0
 )
 
 require (
+	cel.dev/expr v0.15.0 // indirect
 	cloud.google.com/go v0.115.0 // indirect
 	cloud.google.com/go/auth v0.7.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.2 // indirect
 	cloud.google.com/go/compute/metadata v0.4.0 // indirect
-	cloud.google.com/go/iam v1.1.10 // indirect
+	cloud.google.com/go/iam v1.1.11 // indirect
 	cloud.google.com/go/longrunning v0.5.9 // indirect
 	cloud.google.com/go/storage v1.42.0 // indirect
 	github.com/bluele/gcache v0.0.2 // indirect
 	github.com/census-instrumentation/opencensus-proto v0.4.1 // indirect
-	github.com/cespare/xxhash/v2 v2.2.0 // indirect
-	github.com/cncf/xds/go v0.0.0-20240318125728-8a4994d93e50 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/cncf/xds/go v0.0.0-20240423153145-555b57ec207b // indirect
 	github.com/envoyproxy/go-control-plane v0.12.0 // indirect
 	github.com/envoyproxy/protoc-gen-validate v1.0.4 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
