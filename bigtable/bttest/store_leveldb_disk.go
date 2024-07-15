@@ -2,7 +2,6 @@ package bttest
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,7 +50,7 @@ func (f LeveldbDiskStorage) GetTables() []*btapb.Table {
 			return nil
 		}
 		var tbl btapb.Table
-		buf, err := ioutil.ReadFile(path)
+		buf, err := os.ReadFile(path)
 		if err != nil {
 			f.errLog(err, "openq %q", path)
 			return nil
@@ -95,7 +94,7 @@ func (f LeveldbDiskStorage) SetTableMeta(tbl *btapb.Table) {
 
 	outPath := filepath.Join(path + ".table.proto")
 	tmpPath := filepath.Join(path + ".table.proto.tmp")
-	if err := ioutil.WriteFile(tmpPath, buf, 0666); err != nil {
+	if err := os.WriteFile(tmpPath, buf, 0666); err != nil {
 		f.errLog(err, "ioutil.WriteFile %q", tmpPath)
 		return
 	}
