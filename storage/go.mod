@@ -3,7 +3,7 @@ module github.com/fullstorydev/emulators/storage
 go 1.18
 
 require (
-	cloud.google.com/go/storage v1.42.0
+	cloud.google.com/go/storage v1.43.0
 	github.com/bluele/gcache v0.0.2
 	github.com/google/btree v1.1.2
 	golang.org/x/oauth2 v0.21.0
