@@ -22,6 +22,17 @@ func (g *GcsEmu) jsonRespond(w http.ResponseWriter, rsp interface{}) {
 	}
 }
 
+type gapiErrorPartial struct {
+	// Code is the HTTP response status code and will always be populated.
+	Code int `json:"code"`
+
+	// Message is the server response message and is only populated when
+	// explicitly referenced by the JSON server response.
+	Message string `json:"message"`
+
+	Errors []googleapi.ErrorItem `json:"errors,omitempty"`
+}
+
 // gapiError responds to the client with a GAPI error
 func (g *GcsEmu) gapiError(w http.ResponseWriter, code int, message string) {
 	if code == 0 {
@@ -36,9 +47,9 @@ func (g *GcsEmu) gapiError(w http.ResponseWriter, code int, message string) {
 
 	// format copied from errorReply struct in google.golang.org/api/googleapi
 	rsp := struct {
-		Error *googleapi.Error `json:"error"`
+		Error gapiErrorPartial `json:"error"`
 	}{
-		Error: &googleapi.Error{
+		Error: gapiErrorPartial{
 			Code:    code,
 			Message: message,
 		},
@@ -46,7 +57,9 @@ func (g *GcsEmu) gapiError(w http.ResponseWriter, code int, message string) {
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(&rsp)
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(&rsp)
 }
 
 // mustJson serializes the given value to json, panicking on failure
