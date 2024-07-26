@@ -107,7 +107,7 @@ func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url str
 				return req
 			},
 			checkResponse: func(t *testing.T, rsp *http.Response) {
-				assert.Equal(t, http.StatusOK, rsp.StatusCode)
+				assert.Equal(t, http.StatusNoContent, rsp.StatusCode)
 			},
 		},
 		{
