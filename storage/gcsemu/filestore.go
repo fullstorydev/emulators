@@ -86,18 +86,25 @@ func (fs *filestore) GetMeta(baseUrl HttpBaseUrl, bucket string, filename string
 }
 
 func (fs *filestore) Add(bucket string, filename string, contents []byte, meta *storage.Object) error {
-	f := fs.filename(bucket, filename)
-	if err := os.MkdirAll(filepath.Dir(f), 0777); err != nil {
-		return fmt.Errorf("could not create dirs for:  %s: %w", f, err)
+	fName := fs.filename(bucket, filename)
+	fPath := filepath.Dir(fName)
+
+	if err := os.MkdirAll(fPath, 0777); err != nil {
+		return fmt.Errorf("could not create dirs for:  %s: %w", fName, err)
 	}
 
-	if err := ioutil.WriteFile(f, contents, 0666); err != nil {
-		return fmt.Errorf("could not write:  %s: %w", f, err)
+	fTmp, err := os.CreateTemp(fPath, "tmp-*")
+	if err != nil {
+		return fmt.Errorf("could not create temp file name:  %s: %w", fName, err)
+	}
+
+	if err := ioutil.WriteFile(fTmp.Name(), contents, 0666); err != nil {
+		return fmt.Errorf("could not write:  %s: %w", fTmp.Name(), err)
 	}
 
 	// Force a new modification time, since this is what Generation is based on.
 	now := time.Now().UTC()
-	_ = os.Chtimes(f, now, now)
+	_ = os.Chtimes(fTmp.Name(), now, now)
 
 	InitScrubbedMeta(meta, filename)
 	meta.Metageneration = 1
@@ -105,9 +112,23 @@ func (fs *filestore) Add(bucket string, filename string, contents []byte, meta *
 		meta.TimeCreated = now.UTC().Format(time.RFC3339Nano)
 	}
 
-	fMeta := metaFilename(f)
-	if err := ioutil.WriteFile(fMeta, mustJson(meta), 0666); err != nil {
-		return fmt.Errorf("could not write metadata file: %s: %w", fMeta, err)
+	fMetaTmp, err := os.CreateTemp(fPath, "tmp-meta-*")
+	if err != nil {
+		return fmt.Errorf("could not create temp meta file name:  %s: %w", fName, err)
+	}
+
+	if err := ioutil.WriteFile(fMetaTmp.Name(), mustJson(meta), 0666); err != nil {
+		return fmt.Errorf("could not write metadata file: %s: %w", fMetaTmp.Name(), err)
+	}
+
+	if err := os.Rename(fTmp.Name(), fName); err != nil {
+		return fmt.Errorf("could not commit:  %s to %s: %w", fTmp.Name(), fName, err)
+	}
+
+	fMetaName := metaFilename(fName)
+
+	if err := os.Rename(fMetaTmp.Name(), fMetaName); err != nil {
+		return fmt.Errorf("could not commit:  %s to %s: %w", fMetaTmp.Name(), fMetaName, err)
 	}
 
 	return nil
