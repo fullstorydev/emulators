@@ -274,7 +274,7 @@ func (g *GcsEmu) handleGcsDelete(ctx context.Context, w http.ResponseWriter, buc
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (g *GcsEmu) handleGcsMediaRequest(baseUrl HttpBaseUrl, w http.ResponseWriter, acceptEncoding, bucket, filename string) {
