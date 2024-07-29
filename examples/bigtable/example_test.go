@@ -52,7 +52,8 @@ func validateServer(srvAddr string) error {
 		return err
 	}
 
-	client, err := bigtable.NewClient(ctx, proj, instance, option.WithGRPCConn(conn))
+	clientConfig := bigtable.ClientConfig{MetricsProvider: bigtable.NoopMetricsProvider{}}
+	client, err := bigtable.NewClientWithConfig(ctx, proj, instance, clientConfig, option.WithGRPCConn(conn))
 	if err != nil {
 		log.Fatalln(err)
 	}
