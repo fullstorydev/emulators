@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"strings"
 	"testing"
@@ -96,7 +95,7 @@ func testBasics(t *testing.T, bh BucketHandle) {
 
 		r, err := oh.NewReader(ctx)
 		assert.NilError(t, err, "failed")
-		data, err := ioutil.ReadAll(r)
+		data, err := io.ReadAll(r)
 		assert.NilError(t, err, "failed")
 		assert.NilError(t, r.Close(), "failed")
 		assert.Equal(t, content, string(data), "wrong data")
@@ -413,7 +412,7 @@ func testCopyBasics(t *testing.T, bh BucketHandle) {
 	// Read the object.
 	r, err := dest.NewReader(ctx)
 	assert.NilError(t, err, "failed")
-	data, err := ioutil.ReadAll(r)
+	data, err := io.ReadAll(r)
 	assert.NilError(t, err, "failed")
 	assert.NilError(t, r.Close(), "failed")
 	assert.Equal(t, string(data), v1, "wrong data")
@@ -506,7 +505,7 @@ func testCompose(t *testing.T, bh BucketHandle) {
 	assert.Equal(t, "text/plain", attrs.ContentType, "content type doesn't match")
 	r, err := dest.NewReader(ctx)
 	assert.NilError(t, err, "failed to create reader for composed file")
-	data, err := ioutil.ReadAll(r)
+	data, err := io.ReadAll(r)
 	assert.NilError(t, err, "failed to read from composed file")
 	assert.NilError(t, r.Close(), "failed to close composed file reader")
 	assert.Equal(t, manualCompose, string(data), "content doesn't match")
@@ -539,7 +538,7 @@ func testCompose(t *testing.T, bh BucketHandle) {
 	// The resulting data should be correct (like in the original test).
 	r, err = destSecondary.NewReader(ctx)
 	assert.NilError(t, err, "failed to create reader for composed file")
-	data, err = ioutil.ReadAll(r)
+	data, err = io.ReadAll(r)
 	assert.NilError(t, err, "failed to read from composed file")
 	assert.NilError(t, r.Close(), "failed to close composed file reader")
 	assert.Equal(t, manualCompose, string(data), "content doesn't match")
@@ -555,7 +554,7 @@ func testCompose(t *testing.T, bh BucketHandle) {
 
 	r, err = dest.NewReader(ctx)
 	assert.NilError(t, err, "failed to create reader for composed file")
-	data, err = ioutil.ReadAll(r)
+	data, err = io.ReadAll(r)
 	assert.NilError(t, err, "failed to read from composed file")
 	assert.NilError(t, r.Close(), "failed to close composed file reader")
 	assert.Equal(t, manualCompose+source1, string(data), "content doesn't match")

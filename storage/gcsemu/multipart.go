@@ -3,7 +3,7 @@ package gcsemu
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -33,7 +33,7 @@ func readMultipartInsert(r *http.Request) (*storage.Object, []byte, error) {
 			return nil, fmt.Errorf("failed to get multipart: %w", err)
 		}
 
-		b, err := ioutil.ReadAll(part)
+		b, err := io.ReadAll(part)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get read multipart: %w", err)
 		}
