@@ -3,7 +3,7 @@ module github.com/fullstorydev/emulators/examples
 go 1.19
 
 require (
-	cloud.google.com/go/bigtable v1.27.2-0.20240730134218-123c88616251
+	cloud.google.com/go/bigtable v1.29.0
 	github.com/fullstorydev/emulators/bigtable v0.0.0
 	github.com/fullstorydev/emulators/storage v0.0.0
 	google.golang.org/api v0.191.0
@@ -13,7 +13,7 @@ require (
 require (
 	cel.dev/expr v0.15.0 // indirect
 	cloud.google.com/go v0.115.0 // indirect
-	cloud.google.com/go/auth v0.7.3 // indirect
+	cloud.google.com/go/auth v0.8.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.3 // indirect
 	cloud.google.com/go/compute/metadata v0.5.0 // indirect
 	cloud.google.com/go/iam v1.1.12 // indirect
