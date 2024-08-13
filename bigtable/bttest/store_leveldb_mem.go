@@ -1,11 +1,11 @@
 package bttest
 
 import (
+	btapb "cloud.google.com/go/bigtable/admin/apiv2/adminpb"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/comparer"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/storage"
-	btapb "google.golang.org/genproto/googleapis/bigtable/admin/v2"
 )
 
 // LeveldbMemStorage stores data in an in-memory level db. This is the default.

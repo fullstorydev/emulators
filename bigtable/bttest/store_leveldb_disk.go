@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	btapb "cloud.google.com/go/bigtable/admin/apiv2/adminpb"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/comparer"
 	"github.com/syndtr/goleveldb/leveldb/opt"
-	btapb "google.golang.org/genproto/googleapis/bigtable/admin/v2"
 	"google.golang.org/protobuf/proto"
 )
 
