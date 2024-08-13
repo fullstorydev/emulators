@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	"cloud.google.com/go/bigtable"
+	btapb "cloud.google.com/go/bigtable/admin/apiv2/adminpb"
+	btpb "cloud.google.com/go/bigtable/apiv2/bigtablepb"
 	emptypb "github.com/golang/protobuf/ptypes/empty"
-	btapb "google.golang.org/genproto/googleapis/bigtable/admin/v2"
-	btpb "google.golang.org/genproto/googleapis/bigtable/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"

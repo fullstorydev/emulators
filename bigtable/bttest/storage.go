@@ -1,8 +1,8 @@
 package bttest
 
 import (
-	btapb "google.golang.org/genproto/googleapis/bigtable/admin/v2"
-	btpb "google.golang.org/genproto/googleapis/bigtable/v2"
+	btapb "cloud.google.com/go/bigtable/admin/apiv2/adminpb"
+	btpb "cloud.google.com/go/bigtable/apiv2/bigtablepb"
 )
 
 // Storage implements a storage layer for all bigtable emulator data.

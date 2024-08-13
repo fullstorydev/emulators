@@ -1,9 +1,9 @@
 package bttest
 
 import (
+	btpb "cloud.google.com/go/bigtable/apiv2/bigtablepb"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
-	btpb "google.golang.org/genproto/googleapis/bigtable/v2"
 )
 
 type leveldbRows struct {

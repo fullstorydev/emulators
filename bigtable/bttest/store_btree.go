@@ -3,9 +3,9 @@ package bttest
 import (
 	"bytes"
 
+	btapb "cloud.google.com/go/bigtable/admin/apiv2/adminpb"
+	btpb "cloud.google.com/go/bigtable/apiv2/bigtablepb"
 	"github.com/google/btree"
-	btapb "google.golang.org/genproto/googleapis/bigtable/admin/v2"
-	btpb "google.golang.org/genproto/googleapis/bigtable/v2"
 	"google.golang.org/protobuf/proto"
 )
 
