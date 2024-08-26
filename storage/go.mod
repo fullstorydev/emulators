@@ -5,7 +5,7 @@ go 1.19
 require (
 	cloud.google.com/go/storage v1.43.0
 	github.com/bluele/gcache v0.0.2
-	github.com/google/btree v1.1.2
+	github.com/google/btree v1.1.3
 	golang.org/x/oauth2 v0.22.0
 	google.golang.org/api v0.192.0
 	google.golang.org/protobuf v1.34.2
