@@ -113,6 +113,7 @@ func file_gcspagetoken_proto_init() {
 		return
 	}
 	if !protoimpl.UnsafeEnabled {
+		//lint:ignore generated
 		file_gcspagetoken_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*GcsPageToken); i {
 			case 0:
