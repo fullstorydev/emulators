@@ -36,7 +36,7 @@ ineffassign:
 
 .PHONY: predeclared
 predeclared:
-	@go install github.com/nishanths/predeclared@5f2f810c9ae6
+	@go install github.com/nishanths/predeclared@31fd237ab753
 	predeclared ./...
 
 .PHONY: golint
