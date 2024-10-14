@@ -34,7 +34,7 @@ func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url str
 			name: "rawGetObject",
 			makeRequest: func(t *testing.T) *http.Request {
 				u := fmt.Sprintf("%s/download/storage/v1/b/%s/o/%s?alt=media", url, bh.Name, name)
-				t.Logf(u)
+				t.Log(u)
 				req, err := http.NewRequest("GET", u, nil)
 				assert.NilError(t, err)
 				return req
@@ -50,7 +50,7 @@ func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url str
 			name: "rawGetMeta",
 			makeRequest: func(t *testing.T) *http.Request {
 				u := fmt.Sprintf("%s/storage/v1/b/%s/o/%s", url, bh.Name, name)
-				t.Logf(u)
+				t.Log(u)
 				req, err := http.NewRequest("GET", u, nil)
 				assert.NilError(t, err)
 				return req
@@ -73,7 +73,7 @@ func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url str
 			name: "rawPatchMeta",
 			makeRequest: func(t *testing.T) *http.Request {
 				u := fmt.Sprintf("%s/storage/v1/b/%s/o/%s", url, bh.Name, name)
-				t.Logf(u)
+				t.Log(u)
 				req, err := http.NewRequest("PATCH", u, strings.NewReader(`{"metadata": {"type": "tabby"}}`))
 				assert.NilError(t, err)
 				req.Header.Set("Content-Type", "application/json")
@@ -100,7 +100,7 @@ func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url str
 			name: "rawDeleteObject-Success",
 			makeRequest: func(t *testing.T) *http.Request {
 				u := fmt.Sprintf("%s/storage/v1/b/%s/o/%s", url, bh.Name, delName)
-				t.Logf(u)
+				t.Log(u)
 				req, err := http.NewRequest("DELETE", u, nil)
 				assert.NilError(t, err)
 				req.Header.Set("Content-Type", "text/plain")
@@ -114,7 +114,7 @@ func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url str
 			name: "rawDeleteObject-ObjectNotFound",
 			makeRequest: func(t *testing.T) *http.Request {
 				u := fmt.Sprintf("%s/storage/v1/b/%s/o/%s", url, bh.Name, delName2)
-				t.Logf(u)
+				t.Log(u)
 				req, err := http.NewRequest("DELETE", u, nil)
 				assert.NilError(t, err)
 				req.Header.Set("Content-Type", "text/plain")
@@ -128,7 +128,7 @@ func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url str
 			name: "rawDeleteObject-BucketNotFound",
 			makeRequest: func(t *testing.T) *http.Request {
 				u := fmt.Sprintf("%s/storage/v1/b/%s/o/%s", url, invalidBucketName, delName)
-				t.Logf(u)
+				t.Log(u)
 				req, err := http.NewRequest("DELETE", u, nil)
 				assert.NilError(t, err)
 				req.Header.Set("Content-Type", "text/plain")
@@ -142,7 +142,7 @@ func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url str
 			name: "rawDeleteBucket-BucketNotFound",
 			makeRequest: func(t *testing.T) *http.Request {
 				u := fmt.Sprintf("%s/storage/v1/b/%s", url, invalidBucketName)
-				t.Logf(u)
+				t.Log(u)
 				req, err := http.NewRequest("DELETE", u, nil)
 				assert.NilError(t, err)
 				req.Header.Set("Content-Type", "text/plain")
@@ -156,7 +156,7 @@ func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url str
 			name: "rawUpload",
 			makeRequest: func(t *testing.T) *http.Request {
 				u := fmt.Sprintf("%s/upload/storage/v1/b/%s/o?uploadType=media&name=%s", url, bh.Name, name2)
-				t.Logf(u)
+				t.Log(u)
 				req, err := http.NewRequest("POST", u, strings.NewReader(v2))
 				assert.NilError(t, err)
 				req.Header.Set("Content-Type", "text/plain")
@@ -180,7 +180,7 @@ func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url str
 			name: "publicUrl",
 			makeRequest: func(t *testing.T) *http.Request {
 				u := fmt.Sprintf("%s/%s/%s?alt=media", url, bh.Name, name)
-				t.Logf(u)
+				t.Log(u)
 				req, err := http.NewRequest("GET", u, nil)
 				assert.NilError(t, err)
 				return req

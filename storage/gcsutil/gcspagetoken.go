@@ -1,6 +1,6 @@
 package gcsutil
 
-// go:generate protoc --go_out=. --go_opt=paths=source_relative gcspagetoken.proto
+//go:generate protoc --go_out=. --go_opt=paths=source_relative gcspagetoken.proto
 
 import (
 	"encoding/base64"
