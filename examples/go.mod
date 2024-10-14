@@ -1,6 +1,6 @@
 module github.com/fullstorydev/emulators/examples
 
-go 1.19
+go 1.21
 
 require (
 	cloud.google.com/go/bigtable v1.33.0
