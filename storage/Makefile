@@ -26,7 +26,7 @@ vet:
 
 .PHONY: staticcheck
 staticcheck:
-	@go install honnef.co/go/tools/cmd/staticcheck@v0.4.3
+	@go install honnef.co/go/tools/cmd/staticcheck@v0.5.1
 	staticcheck ./...
 
 .PHONY: ineffassign
@@ -36,7 +36,7 @@ ineffassign:
 
 .PHONY: predeclared
 predeclared:
-	@go install github.com/nishanths/predeclared@5f2f810c9ae6
+	@go install github.com/dragonsinth/predeclared@cd30779f0ab6
 	predeclared ./...
 
 .PHONY: golint
