@@ -530,7 +530,7 @@ func (g *GcsEmu) handleGcsNewObject(ctx context.Context, baseUrl HttpBaseUrl, w 
 
 		w.Header().Set("Location", ObjectUrl(baseUrl, bucket, obj.Name)+"?upload_id="+id)
 		w.Header().Set("Content-Type", obj.ContentType)
-		w.WriteHeader(http.StatusCreated)
+		w.WriteHeader(http.StatusOK)
 		return
 	case "multipart":
 		obj, contents, err := readMultipartInsert(r)
