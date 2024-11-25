@@ -1,13 +1,14 @@
 module github.com/fullstorydev/emulators/examples
 
 go 1.21
+toolchain go1.22.9
 
 require (
 	cloud.google.com/go/bigtable v1.33.0
 	github.com/fullstorydev/emulators/bigtable v0.0.0
 	github.com/fullstorydev/emulators/storage v0.0.0
 	google.golang.org/api v0.209.0
-	google.golang.org/grpc v1.67.1
+	google.golang.org/grpc v1.68.0
 )
 
 require (
