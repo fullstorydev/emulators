@@ -5,7 +5,7 @@ toolchain go1.22.9
 
 require (
 	cloud.google.com/go/bigtable v1.33.0
-	cloud.google.com/go/iam v1.2.2
+	cloud.google.com/go/iam v1.3.0
 	github.com/golang/protobuf v1.5.4
 	github.com/google/btree v1.1.3
 	github.com/google/go-cmp v0.6.0
