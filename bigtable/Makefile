@@ -1,11 +1,11 @@
 dev_build_version=$(shell git describe --tags --always --dirty)
 
 .PHONY: ci
-ci: deps checkgofmt vet staticcheck ineffassign predeclared golint errcheck test
+ci: deps checkgofmt vet staticcheck ineffassign predeclared golint errcheck test docker
 
 .PHONY: deps
 deps:
-	go get -d -v -t ./...
+	go get -v -t ./...
 	go mod tidy
 
 .PHONY: updatedeps
@@ -59,11 +59,11 @@ install:
 
 .PHONY: release
 release:
-	@go install github.com/goreleaser/goreleaser@v0.134.0
-	goreleaser --rm-dist
+	@go install github.com/goreleaser/goreleaser@v1.21.0
+	goreleaser release --clean
 
 .PHONY: docker
 docker:
 	@echo $(dev_build_version) > VERSION
-	docker build --target=cbtemulator -t fullstorydev/cbtemulator:$(dev_build_version) ..
+	docker build -t fullstorydev/cbtemulator:$(dev_build_version) .
 	@rm VERSION
