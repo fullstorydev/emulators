@@ -2,8 +2,6 @@ module github.com/fullstorydev/emulators/examples
 
 go 1.22.7
 
-toolchain go1.23.5
-
 require (
 	cloud.google.com/go/bigtable v1.35.0
 	github.com/fullstorydev/emulators/bigtable v0.0.0
