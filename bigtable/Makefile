@@ -1,7 +1,7 @@
 dev_build_version=$(shell git describe --tags --always --dirty)
 
 .PHONY: ci
-ci: deps checkgofmt vet staticcheck ineffassign predeclared golint errcheck test docker
+ci: deps checkgofmt vet staticcheck ineffassign predeclared golint errcheck test
 
 .PHONY: deps
 deps:
