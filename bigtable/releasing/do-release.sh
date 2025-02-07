@@ -24,16 +24,6 @@ VERSION=$1
 # Change to root of the repo
 cd "$(dirname "$0")/.."
 
-# GitHub release
-
-# release target requires that the current SHA have a sem-ver tag. That's the version it will use when creating the release.
-$PREFIX git tag bigtable/"$VERSION"
-# make sure GITHUB_TOKEN is exported, for the benefit of this next command
-export GITHUB_TOKEN
-GO111MODULE=on $PREFIX make release
-# if that was successful, it could have touched go.mod and go.sum, so revert those
-$PREFIX git checkout go.mod go.sum
-
 # Docker release
 
 # make sure credentials are valid for later push steps; this might
