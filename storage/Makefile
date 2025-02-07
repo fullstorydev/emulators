@@ -1,4 +1,7 @@
-dev_build_version=$(shell git describe --tags --always --dirty)
+# dev_build_prefixed_version has the format "storage/<dev_version>"
+dev_build_prefixed_version=$(shell git describe --tags --always --match 'storage/*' --dirty)
+# dev_build_version is like dev_build_prefixed_version, but without the "storage/" prefix
+dev_build_version=$(shell echo $(dev_build_prefixed_version) | sed 's/^storage\///')
 
 .PHONY: ci
 ci: deps checkgofmt vet staticcheck ineffassign predeclared golint errcheck test
