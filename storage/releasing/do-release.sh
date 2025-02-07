@@ -24,16 +24,6 @@ VERSION=$1
 # Change to root of the repo
 cd "$(dirname "$0")/.."
 
-# GitHub release
-
-# release target requires that the current SHA have a sem-ver tag. That's the version it will use when creating the release.
-$PREFIX git tag storage/"$VERSION"
-# make sure GITHUB_TOKEN is exported, for the benefit of this next command
-export GITHUB_TOKEN
-GO111MODULE=on $PREFIX make release
-# if that was successful, it could have touched go.mod and go.sum, so revert those
-$PREFIX git checkout go.mod go.sum
-
 # Docker release
 
 # make sure credentials are valid for later push steps; this might
@@ -41,8 +31,13 @@ $PREFIX git checkout go.mod go.sum
 # if there are no valid current credentials.
 $PREFIX docker login
 echo "$VERSION" > VERSION
-$PREFIX docker build --target=gcsemulator -t "fullstorydev/gcsemulator:${VERSION}" -t fullstorydev/gcsemulator:latest .
-rm VERSION
+# Docker Buildx support is included in Docker 19.03
+# Below step installs emulators for different architectures on the host
+# This enables running and building containers for below architectures mentioned using --platforms
+$PREFIX docker run --privileged --rm tonistiigi/binfmt:qemu-v6.1.0 --install all
+# Create a new builder instance
+export DOCKER_CLI_EXPERIMENTAL=enabled
+$PREFIX docker buildx create --use --name multiarch-builder --node multiarch-builder0
 # push to docker hub, both the given version as a tag and for "latest" tag
-$PREFIX docker push "fullstorydev/gcsemulator:${VERSION}"
-$PREFIX docker push fullstorydev/gcsemulator:latest
+$PREFIX docker buildx build --target=gcsemulator --platform linux/amd64,linux/s390x,linux/arm64,linux/ppc64le --tag fullstorydev/gcsemulator:${VERSION} --tag fullstorydev/gcsemulator:latest --push --progress plain --no-cache .
+rm VERSION

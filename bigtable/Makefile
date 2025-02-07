@@ -1,4 +1,7 @@
-dev_build_version=$(shell git describe --tags --always --dirty)
+# dev_build_prefixed_version has the format "bigtable/<dev_version>"
+dev_build_prefixed_version=$(shell git describe --tags --always --match 'bigtable/*' --dirty)
+# dev_build_version is like dev_build_prefixed_version, but without the "bigtable/" prefix
+dev_build_version=$(shell echo $(dev_build_prefixed_version) | sed 's/^bigtable\///')
 
 .PHONY: ci
 ci: deps checkgofmt vet staticcheck ineffassign predeclared golint errcheck test

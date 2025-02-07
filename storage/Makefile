@@ -1,11 +1,14 @@
-dev_build_version=$(shell git describe --tags --always --dirty)
+# dev_build_prefixed_version has the format "storage/<dev_version>"
+dev_build_prefixed_version=$(shell git describe --tags --always --match 'storage/*' --dirty)
+# dev_build_version is like dev_build_prefixed_version, but without the "storage/" prefix
+dev_build_version=$(shell echo $(dev_build_prefixed_version) | sed 's/^storage\///')
 
 .PHONY: ci
 ci: deps checkgofmt vet staticcheck ineffassign predeclared golint errcheck test
 
 .PHONY: deps
 deps:
-	go get -d -v -t ./...
+	go get -v -t ./...
 	go mod tidy
 
 .PHONY: updatedeps
@@ -59,11 +62,11 @@ install:
 
 .PHONY: release
 release:
-	@go install github.com/goreleaser/goreleaser@v0.134.0
-	goreleaser --rm-dist
+	@go install github.com/goreleaser/goreleaser@v1.21.0
+	goreleaser release --clean
 
 .PHONY: docker
 docker:
 	@echo $(dev_build_version) > VERSION
-	docker build --target=gcsemulator -t fullstorydev/gcsemulator:$(dev_build_version) ..
+	docker build -t fullstorydev/gcsemulator:$(dev_build_version) .
 	@rm VERSION
