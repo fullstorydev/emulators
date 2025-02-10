@@ -13,7 +13,7 @@ require (
 	google.golang.org/api v0.219.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250124145028-65684f501c47
 	google.golang.org/grpc v1.70.0
-	google.golang.org/protobuf v1.36.4
+	google.golang.org/protobuf v1.36.5
 	rsc.io/binaryregexp v0.2.0
 )
 
