@@ -7,9 +7,9 @@ updates:
       interval: "weekly"
   - package-ecosystem: "gomod"
     directory: "/examples/"
-    # Check for updates once a week
+    # Check for updates once a month
     schedule:
-      interval: "weekly"
+      interval: "monthly"
   - package-ecosystem: "gomod"
     directory: "/storage/"
     # Check for updates once a week
