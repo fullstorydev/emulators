@@ -10,8 +10,8 @@ require (
 	github.com/google/go-cmp v0.6.0
 	github.com/syndtr/goleveldb v1.0.0
 	golang.org/x/sync v0.11.0
-	google.golang.org/api v0.220.0
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250127172529-29210b9bc287
+	google.golang.org/api v0.221.0
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250207221924-e9438ea467c6
 	google.golang.org/grpc v1.70.0
 	google.golang.org/protobuf v1.36.5
 	rsc.io/binaryregexp v0.2.0
@@ -47,12 +47,12 @@ require (
 	go.opentelemetry.io/otel/sdk v1.34.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.32.0 // indirect
 	go.opentelemetry.io/otel/trace v1.34.0 // indirect
-	golang.org/x/crypto v0.32.0 // indirect
-	golang.org/x/net v0.34.0 // indirect
-	golang.org/x/oauth2 v0.25.0 // indirect
-	golang.org/x/sys v0.29.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
-	golang.org/x/time v0.9.0 // indirect
+	golang.org/x/crypto v0.33.0 // indirect
+	golang.org/x/net v0.35.0 // indirect
+	golang.org/x/oauth2 v0.26.0 // indirect
+	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/text v0.22.0 // indirect
+	golang.org/x/time v0.10.0 // indirect
 	google.golang.org/genproto v0.0.0-20250122153221-138b5a5a4fd4 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250207221924-e9438ea467c6 // indirect
 )
