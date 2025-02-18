@@ -9,7 +9,7 @@ require (
 	github.com/google/btree v1.1.3
 	github.com/google/go-cmp v0.6.0
 	github.com/syndtr/goleveldb v1.0.0
-	golang.org/x/sync v0.10.0
+	golang.org/x/sync v0.11.0
 	google.golang.org/api v0.220.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250127172529-29210b9bc287
 	google.golang.org/grpc v1.70.0
