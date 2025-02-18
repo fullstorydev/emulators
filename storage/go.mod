@@ -8,7 +8,7 @@ require (
 	github.com/google/btree v1.1.3
 	golang.org/x/oauth2 v0.26.0
 	google.golang.org/api v0.219.0
-	google.golang.org/protobuf v1.36.4
+	google.golang.org/protobuf v1.36.5
 	gotest.tools/v3 v3.5.2
 )
 
