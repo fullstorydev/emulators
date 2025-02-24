@@ -1,6 +1,7 @@
 module github.com/fullstorydev/emulators/bigtable
 
 go 1.22.7
+toolchain go1.23.6
 
 require (
 	cloud.google.com/go/bigtable v1.35.0
@@ -10,8 +11,8 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/syndtr/goleveldb v1.0.0
 	golang.org/x/sync v0.11.0
-	google.golang.org/api v0.221.0
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250207221924-e9438ea467c6
+	google.golang.org/api v0.222.0
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250212204824-5a70512c5d8b
 	google.golang.org/grpc v1.70.0
 	google.golang.org/protobuf v1.36.5
 	rsc.io/binaryregexp v0.2.0
