@@ -7,7 +7,7 @@ require (
 	cloud.google.com/go/iam v1.4.0
 	github.com/golang/protobuf v1.5.4
 	github.com/google/btree v1.1.3
-	github.com/google/go-cmp v0.6.0
+	github.com/google/go-cmp v0.7.0
 	github.com/syndtr/goleveldb v1.0.0
 	golang.org/x/sync v0.11.0
 	google.golang.org/api v0.221.0
