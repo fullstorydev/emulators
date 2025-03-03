@@ -21,6 +21,12 @@ jobs:
     working_directory: ~/repo
     docker:
       - image: cimg/go:1.22
+    steps: *simple_job_steps
+
+  build-1-23:
+    working_directory: ~/repo
+    docker:
+      - image: cimg/go:1.23
     steps:
       - checkout
       - run:
@@ -29,12 +35,6 @@ jobs:
             make -C bigtable ci
             make -C storage ci
             make -C examples ci
-
-  build-1-23:
-    working_directory: ~/repo
-    docker:
-      - image: cimg/go:1.23
-    steps: *simple_job_steps
 
 workflows:
   pr-build-test:
