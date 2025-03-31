@@ -1,7 +1,7 @@
 module github.com/fullstorydev/emulators/storage
 
 go 1.22
-toolchain go1.23.6
+toolchain go1.24.1
 
 require (
 	cloud.google.com/go/storage v1.50.0
@@ -9,7 +9,7 @@ require (
 	github.com/google/btree v1.1.3
 	golang.org/x/oauth2 v0.28.0
 	google.golang.org/api v0.223.0
-	google.golang.org/protobuf v1.36.5
+	google.golang.org/protobuf v1.36.6
 	gotest.tools/v3 v3.5.2
 )
 
