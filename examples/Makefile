@@ -3,8 +3,7 @@ ci: deps checkgofmt vet staticcheck ineffassign predeclared golint errcheck test
 
 .PHONY: deps
 deps:
-	go get -d -v -t ./...
-	go mod tidy
+	go mod download
 
 .PHONY: updatedeps
 updatedeps:
@@ -34,7 +33,7 @@ ineffassign:
 
 .PHONY: predeclared
 predeclared:
-	@go install github.com/dragonsinth/predeclared@154d704ce28e2a93072c21de8f4fa13392b42689
+	@go install github.com/nishanths/predeclared@51e8c974458a0f93dc03fe356f91ae1a6d791e6f
 	predeclared ./...
 
 .PHONY: golint
