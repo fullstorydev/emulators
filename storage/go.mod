@@ -1,7 +1,6 @@
 module github.com/fullstorydev/emulators/storage
 
 go 1.22
-toolchain go1.24.1
 
 require (
 	cloud.google.com/go/storage v1.50.0
