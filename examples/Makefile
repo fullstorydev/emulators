@@ -3,7 +3,8 @@ ci: deps checkgofmt vet staticcheck ineffassign predeclared golint errcheck test
 
 .PHONY: deps
 deps:
-	go mod download
+	go get -d -v -t ./...
+	go mod tidy
 
 .PHONY: updatedeps
 updatedeps:
