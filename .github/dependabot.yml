@@ -1,17 +1,10 @@
 version: 2
 updates:
   - package-ecosystem: "gomod"
-    directory: "/bigtable/"
-    # Check for updates once a week
-    schedule:
-      interval: "weekly"
-  - package-ecosystem: "gomod"
-    directory: "/examples/"
-    # Check for updates once a month
-    schedule:
-      interval: "monthly"
-  - package-ecosystem: "gomod"
-    directory: "/storage/"
+    directories:
+      - "/bigtable"
+      - "/examples"
+      - "/storage"
     # Check for updates once a week
     schedule:
       interval: "weekly"
