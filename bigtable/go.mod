@@ -1,6 +1,7 @@
 module github.com/fullstorydev/emulators/bigtable
 
-go 1.22
+go 1.23.0
+
 toolchain go1.24.1
 
 require (
@@ -10,9 +11,9 @@ require (
 	github.com/google/btree v1.1.3
 	github.com/google/go-cmp v0.7.0
 	github.com/syndtr/goleveldb v1.0.0
-	golang.org/x/sync v0.13.0
-	google.golang.org/api v0.230.0
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250414145226-207652e42e2e
+	golang.org/x/sync v0.14.0
+	google.golang.org/api v0.233.0
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250505200425-f936aa4a68b2
 	google.golang.org/grpc v1.72.0
 	google.golang.org/protobuf v1.36.6
 	rsc.io/binaryregexp v0.2.0
@@ -21,7 +22,7 @@ require (
 require (
 	cel.dev/expr v0.20.0 // indirect
 	cloud.google.com/go v0.120.0 // indirect
-	cloud.google.com/go/auth v0.16.0 // indirect
+	cloud.google.com/go/auth v0.16.1 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.6.0 // indirect
 	cloud.google.com/go/longrunning v0.6.6 // indirect
@@ -50,11 +51,11 @@ require (
 	go.opentelemetry.io/otel/sdk v1.35.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.35.0 // indirect
 	go.opentelemetry.io/otel/trace v1.35.0 // indirect
-	golang.org/x/crypto v0.37.0 // indirect
-	golang.org/x/net v0.39.0 // indirect
-	golang.org/x/oauth2 v0.29.0 // indirect
-	golang.org/x/sys v0.32.0 // indirect
-	golang.org/x/text v0.24.0 // indirect
+	golang.org/x/crypto v0.38.0 // indirect
+	golang.org/x/net v0.40.0 // indirect
+	golang.org/x/oauth2 v0.30.0 // indirect
+	golang.org/x/sys v0.33.0 // indirect
+	golang.org/x/text v0.25.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
 	google.golang.org/genproto v0.0.0-20250303144028-a0af3efb3deb // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250414145226-207652e42e2e // indirect
