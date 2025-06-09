@@ -12,8 +12,8 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/syndtr/goleveldb v1.0.0
 	golang.org/x/sync v0.14.0
-	google.golang.org/api v0.235.0
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250512202823-5a2f75b736a9
+	google.golang.org/api v0.236.0
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250528174236-200df99c418a
 	google.golang.org/grpc v1.72.2
 	google.golang.org/protobuf v1.36.6
 	rsc.io/binaryregexp v0.2.0
