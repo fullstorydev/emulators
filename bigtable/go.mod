@@ -12,7 +12,7 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/syndtr/goleveldb v1.0.0
 	golang.org/x/sync v0.15.0
-	google.golang.org/api v0.237.0
+	google.golang.org/api v0.239.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822
 	google.golang.org/grpc v1.73.0
 	google.golang.org/protobuf v1.36.6
