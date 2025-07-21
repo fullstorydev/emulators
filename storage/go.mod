@@ -9,7 +9,7 @@ require (
 	github.com/bluele/gcache v0.0.2
 	github.com/google/btree v1.1.3
 	golang.org/x/oauth2 v0.30.0
-	google.golang.org/api v0.241.0
+	google.golang.org/api v0.242.0
 	google.golang.org/protobuf v1.36.6
 	gotest.tools/v3 v3.5.2
 )
