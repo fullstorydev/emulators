@@ -121,12 +121,6 @@ type Options struct {
 // The Server will be listening for gRPC connections, without TLS,
 // on the provided address. The resolved address is named by the Addr field.
 func NewServerWithOptions(laddr string, opt Options) (*Server, error) {
-	if opt.Storage == nil {
-		opt.Storage = LeveldbMemStorage{}
-	}
-	if opt.Clock == nil {
-		opt.Clock = bigtable.Now
-	}
 	l, err := net.Listen("tcp", laddr)
 	if err != nil {
 		return nil, err
@@ -136,18 +130,7 @@ func NewServerWithOptions(laddr string, opt Options) (*Server, error) {
 		Addr: l.Addr().String(),
 		l:    l,
 		srv:  grpc.NewServer(opt.GrpcOpts...),
-		s: &server{
-			storage: opt.Storage,
-			tables:  make(map[string]*table),
-			clock:   opt.Clock,
-			done:    make(chan struct{}),
-		},
-	}
-
-	// Init from storage.
-	for _, tbl := range s.s.storage.GetTables() {
-		rows := s.s.storage.Open(tbl)
-		s.s.tables[tbl.Name] = newTable(tbl, rows)
+		s:    NewGServerWithOptions(opt),
 	}
 
 	btapb.RegisterBigtableInstanceAdminServer(s.srv, s.s)
@@ -164,24 +147,9 @@ func NewServerWithOptions(laddr string, opt Options) (*Server, error) {
 
 // Close shuts down the server.
 func (s *Server) Close() {
-	close(s.s.done)
 	s.srv.Stop()
 	_ = s.l.Close()
-
-	var tbls []*table
-	s.s.mu.Lock()
-	for _, t := range s.s.tables {
-		tbls = append(tbls, t)
-	}
-	s.s.mu.Unlock()
-
-	for _, tbl := range tbls {
-		func() {
-			tbl.mu.Lock()
-			defer tbl.mu.Unlock()
-			tbl.rows.Close()
-		}()
-	}
+	s.s.Close()
 }
 
 func (s *server) CreateTable(ctx context.Context, req *btapb.CreateTableRequest) (*btapb.Table, error) {
