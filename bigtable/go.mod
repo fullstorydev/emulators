@@ -15,7 +15,7 @@ require (
 	google.golang.org/api v0.247.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250804133106-a7a43d27e69b
 	google.golang.org/grpc v1.75.0
-	google.golang.org/protobuf v1.36.7
+	google.golang.org/protobuf v1.36.8
 	rsc.io/binaryregexp v0.2.0
 )
 
