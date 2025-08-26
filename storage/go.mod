@@ -10,7 +10,7 @@ require (
 	github.com/google/btree v1.1.3
 	golang.org/x/oauth2 v0.30.0
 	google.golang.org/api v0.247.0
-	google.golang.org/protobuf v1.36.7
+	google.golang.org/protobuf v1.36.8
 	gotest.tools/v3 v3.5.2
 )
 
