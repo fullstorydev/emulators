@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	//lint:ignore SA1019 ioutil
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -257,4 +259,22 @@ func (fs *filestore) Walk(ctx context.Context, bucket string, cb func(ctx contex
 		}
 		return nil
 	})
+}
+
+func (fs *filestore) ListBuckets(ctx context.Context, baseUrl HttpBaseUrl, cb func(ctx context.Context, bucket *storage.Bucket) error) error {
+	entries, err := ioutil.ReadDir(fs.gcsDir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		bucket := BucketMeta(baseUrl, entry.Name())
+		bucket.Updated = entry.ModTime().UTC().Format(time.RFC3339Nano)
+		if err := cb(ctx, bucket); err != nil {
+			return err
+		}
+	}
+	return nil
 }

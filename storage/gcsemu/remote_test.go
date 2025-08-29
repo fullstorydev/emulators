@@ -2,11 +2,13 @@ package gcsemu
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 
 	"cloud.google.com/go/storage"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/api/iterator"
 	"gotest.tools/v3/assert"
 )
 
@@ -46,5 +48,23 @@ func TestRealStore(t *testing.T) {
 	t.Run("RawHttp", func(t *testing.T) {
 		t.Parallel()
 		testRawHttp(t, bh, httpClient, "https://storage.googleapis.com")
+	})
+
+	t.Run("List Buckets", func(t *testing.T) {
+		project := os.Getenv("PROJECT_ID")
+		if bucket == "" {
+			t.Skip("PROJECT_ID must be set to run this")
+		}
+
+		t.Parallel()
+		it := gcsClient.Buckets(context.Background(), project)
+		for {
+			bucket, err := it.Next()
+			if errors.Is(err, iterator.Done) {
+				break
+			}
+			assert.NilError(t, err)
+			t.Log(bucket.Name)
+		}
 	})
 }

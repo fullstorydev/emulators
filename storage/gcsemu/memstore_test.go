@@ -58,4 +58,10 @@ func TestMemStore(t *testing.T) {
 		t.Parallel()
 		testRawHttp(t, bh, http.DefaultClient, svr.URL)
 	})
+
+	t.Run("List Buckets", func(t *testing.T) {
+		t.Parallel()
+		testListBuckets(t, gcsClient, []string{"mem-bucket"})
+	})
+
 }
