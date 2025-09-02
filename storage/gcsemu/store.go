@@ -36,6 +36,9 @@ type Store interface {
 	// ReadMeta reads the GCS metadata for a file, when you already have file info.
 	ReadMeta(url HttpBaseUrl, bucket string, filename string, fInfo os.FileInfo) (*storage.Object, error)
 
-	// Walks the given bucket.
+	// Walk walks the given bucket.
 	Walk(ctx context.Context, bucket string, cb func(ctx context.Context, filename string, fInfo os.FileInfo) error) error
+
+	// ListBuckets lists all the buckets.
+	ListBuckets(ctx context.Context, url HttpBaseUrl, cb func(ctx context.Context, bucket *storage.Bucket) error) error
 }

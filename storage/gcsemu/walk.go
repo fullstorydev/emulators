@@ -94,7 +94,7 @@ func (g *GcsEmu) makeBucketListResults(ctx context.Context, baseUrl HttpBaseUrl,
 		return nil
 	})
 	// Sentinel error is not an error
-	if err == errAbort {
+	if errors.Is(err, errAbort) {
 		err = nil
 	}
 	if err != nil {
@@ -133,6 +133,60 @@ func (g *GcsEmu) makeBucketListResults(ctx context.Context, baseUrl HttpBaseUrl,
 		NextPageToken: nextPageToken,
 		Items:         items,
 		Prefixes:      prefixes,
+	}
+
+	g.jsonRespond(w, &rsp)
+}
+
+// Iterate over the file system to serve a GCS list-buckets request.
+func (g *GcsEmu) makeBucketResults(ctx context.Context, baseUrl HttpBaseUrl, w http.ResponseWriter, cursor string, prefix string, maxResults int) {
+	var errAbort = errors.New("sentinel error to abort walk")
+
+	var buckets []*storage.Bucket
+	moreResults := false
+	count := 0
+	err := g.store.ListBuckets(ctx, baseUrl, func(ctx context.Context, bucket *storage.Bucket) error {
+		// If we're beyond the prefix, we're completely done.
+		if greaterThanPrefix(bucket.Name, prefix) {
+			return errAbort
+		}
+
+		// If the file is <= cursor, or < prefix, skip.
+		if bucket.Name <= cursor {
+			return nil
+		}
+		if !strings.HasPrefix(bucket.Name, prefix) {
+			return nil
+		}
+
+		if count >= maxResults {
+			moreResults = true
+			return errAbort
+		}
+		count++
+
+		buckets = append(buckets, bucket)
+		return nil
+	})
+	// Sentinel error is not an error
+	if errors.Is(err, errAbort) {
+		err = nil
+	}
+	if err != nil {
+		g.gapiError(w, http.StatusInternalServerError, "failed to iterate: "+err.Error())
+		return
+	}
+
+	var nextPageToken = ""
+	if moreResults && len(buckets) > 0 {
+		lastItemName := buckets[len(buckets)-1].Name
+		nextPageToken = gcsutil.EncodePageToken(lastItemName)
+	}
+
+	rsp := storage.Buckets{
+		Kind:          "storage#buckets",
+		NextPageToken: nextPageToken,
+		Items:         buckets,
 	}
 
 	g.jsonRespond(w, &rsp)

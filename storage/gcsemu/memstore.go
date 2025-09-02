@@ -3,6 +3,8 @@ package gcsemu
 import (
 	"context"
 	"os"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -186,9 +188,32 @@ func (ms *memstore) Walk(ctx context.Context, bucket string, cb func(ctx context
 			err = cb(ctx, mf.meta.Name, nil)
 			return err == nil
 		})
-		return nil
+		return err
 	}
 	return os.ErrNotExist
+}
+
+func (ms *memstore) ListBuckets(ctx context.Context, baseUrl HttpBaseUrl, cb func(ctx context.Context, bucket *storage.Bucket) error) error {
+	buckets := func() []*storage.Bucket {
+		ms.mu.RLock()
+		defer ms.mu.RUnlock()
+		var buckets []*storage.Bucket
+		for name, b := range ms.buckets {
+			bucket := BucketMeta(baseUrl, name)
+			bucket.Updated = b.created.UTC().Format(time.RFC3339Nano)
+			buckets = append(buckets, bucket)
+		}
+		return buckets
+	}()
+	slices.SortFunc(buckets, func(a, b *storage.Bucket) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+	for _, bucket := range buckets {
+		if err := cb(ctx, bucket); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (ms *memstore) key(filename string) btree.Item {

@@ -582,6 +582,21 @@ func testCopyConditionals(t *testing.T, bh BucketHandle) {
 	t.Skip()
 }
 
+func testListBuckets(t *testing.T, gcsClient *storage.Client, expect []string) {
+	it := gcsClient.Buckets(context.Background(), "")
+	var results []string
+	for {
+		bucket, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		assert.NilError(t, err)
+		t.Log(bucket.Name)
+		results = append(results, bucket.Name)
+	}
+	assert.DeepEqual(t, expect, results)
+}
+
 func write(w *storage.Writer, content string) error {
 	n, err := io.Copy(w, strings.NewReader(content))
 	if err != nil {
