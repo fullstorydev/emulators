@@ -137,7 +137,7 @@ func (g *GcsEmu) Handler(w http.ResponseWriter, r *http.Request) {
 		} else {
 			alt := r.URL.Query().Get("alt")
 			if alt == "media" || (p.IsPublic && alt == "") {
-				g.handleGcsMediaRequest(baseUrl, w, r.Header.Get("Accept-Encoding"), bucket, object)
+				g.handleGcsMediaRequest(baseUrl, w, r.Header.Get("Accept-Encoding"), r.Header.Get("Range"), bucket, object)
 			} else if alt == "json" || (!p.IsPublic && alt == "") {
 				g.handleGcsMetadataRequest(baseUrl, w, bucket, object)
 			} else {
@@ -309,7 +309,51 @@ func (g *GcsEmu) handleGcsDelete(ctx context.Context, w http.ResponseWriter, buc
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (g *GcsEmu) handleGcsMediaRequest(baseUrl HttpBaseUrl, w http.ResponseWriter, acceptEncoding, bucket, filename string) {
+// parseRangeRequestHeader parses an HTTP Range request header (e.g. "bytes=0-99")
+// and clamps to the given total size. Returns the inclusive lo/hi byte offsets
+// and true if a valid range was parsed.
+func parseRangeRequestHeader(header string, totalSize int64) (lo, hi int64, ok bool) {
+	if !strings.HasPrefix(header, "bytes=") {
+		return 0, 0, false
+	}
+	spec := strings.TrimPrefix(header, "bytes=")
+	parts := strings.SplitN(spec, "-", 2)
+	if len(parts) != 2 {
+		return 0, 0, false
+	}
+
+	if parts[0] == "" {
+		suffix, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil || suffix <= 0 {
+			return 0, 0, false
+		}
+		lo = totalSize - suffix
+		if lo < 0 {
+			lo = 0
+		}
+		return lo, totalSize - 1, true
+	}
+
+	lo, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil || lo < 0 || lo >= totalSize {
+		return 0, 0, false
+	}
+
+	if parts[1] == "" {
+		return lo, totalSize - 1, true
+	}
+
+	hi, err = strconv.ParseInt(parts[1], 10, 64)
+	if err != nil || hi < lo {
+		return 0, 0, false
+	}
+	if hi >= totalSize {
+		hi = totalSize - 1
+	}
+	return lo, hi, true
+}
+
+func (g *GcsEmu) handleGcsMediaRequest(baseUrl HttpBaseUrl, w http.ResponseWriter, acceptEncoding, rangeHeader, bucket, filename string) {
 	obj, contents, err := g.store.Get(baseUrl, bucket, filename)
 	if err != nil {
 		g.gapiError(w, http.StatusInternalServerError, fmt.Sprintf("failed to check existence of %s/%s: %s", bucket, filename, err))
@@ -324,7 +368,7 @@ func (g *GcsEmu) handleGcsMediaRequest(baseUrl HttpBaseUrl, w http.ResponseWrite
 	w.Header().Set("X-Goog-Generation", strconv.FormatInt(obj.Generation, 10))
 	w.Header().Set("X-Goog-Metageneration", strconv.FormatInt(obj.Metageneration, 10))
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Expose-Headers", "Content-Type, Content-Length, Content-Encoding, Date, X-Goog-Generation, X-Goog-Metageneration")
+	w.Header().Set("Access-Control-Expose-Headers", "Content-Type, Content-Length, Content-Encoding, Content-Range, Date, X-Goog-Generation, X-Goog-Metageneration")
 	w.Header().Set("Content-Disposition", obj.ContentDisposition)
 
 	if obj.ContentEncoding == "gzip" {
@@ -345,6 +389,17 @@ func (g *GcsEmu) handleGcsMediaRequest(baseUrl HttpBaseUrl, w http.ResponseWrite
 			}
 			return
 		}
+	}
+
+	if lo, hi, ok := parseRangeRequestHeader(rangeHeader, int64(len(contents))); ok {
+		sliced := contents[lo : hi+1]
+		w.Header().Set("Content-Length", strconv.Itoa(len(sliced)))
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", lo, hi, len(contents)))
+		w.WriteHeader(http.StatusPartialContent)
+		if _, err := w.Write(sliced); err != nil {
+			g.gapiError(w, http.StatusInternalServerError, fmt.Sprintf("failed to copy from %s/%s: %s", bucket, filename, err))
+		}
+		return
 	}
 
 	// Just write the contents

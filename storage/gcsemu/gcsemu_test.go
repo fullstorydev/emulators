@@ -37,6 +37,7 @@ var (
 		{"Compose", testCompose},
 		{"CopyMetadata", testCopyMetadata},
 		{"CopyConditionals", testCopyConditionals},
+		{"RangeRead", testRangeRead},
 	}
 )
 
@@ -606,4 +607,54 @@ func write(w *storage.Writer, content string) error {
 		panic("not all content sent")
 	}
 	return w.Close()
+}
+
+func testRangeRead(t *testing.T, bh BucketHandle) {
+	const name = "gcsemu-test/range.bin"
+	const content = "AAABBBCCC"
+	ctx := context.Background()
+	oh := bh.Object(name)
+
+	err := write(oh.NewWriter(ctx), content)
+	assert.NilError(t, err, "write failed")
+
+	// Full read still works.
+	r, err := oh.NewReader(ctx)
+	assert.NilError(t, err)
+	data, err := io.ReadAll(r)
+	assert.NilError(t, err)
+	assert.NilError(t, r.Close())
+	assert.Equal(t, content, string(data))
+
+	// Range read: middle slice.
+	r, err = oh.NewRangeReader(ctx, 3, 3)
+	assert.NilError(t, err)
+	data, err = io.ReadAll(r)
+	assert.NilError(t, err)
+	assert.NilError(t, r.Close())
+	assert.Equal(t, "BBB", string(data))
+
+	// Range read: first slice.
+	r, err = oh.NewRangeReader(ctx, 0, 3)
+	assert.NilError(t, err)
+	data, err = io.ReadAll(r)
+	assert.NilError(t, err)
+	assert.NilError(t, r.Close())
+	assert.Equal(t, "AAA", string(data))
+
+	// Range read: last slice.
+	r, err = oh.NewRangeReader(ctx, 6, 3)
+	assert.NilError(t, err)
+	data, err = io.ReadAll(r)
+	assert.NilError(t, err)
+	assert.NilError(t, r.Close())
+	assert.Equal(t, "CCC", string(data))
+
+	// Range read: open-ended (length -1) reads to end.
+	r, err = oh.NewRangeReader(ctx, 3, -1)
+	assert.NilError(t, err)
+	data, err = io.ReadAll(r)
+	assert.NilError(t, err)
+	assert.NilError(t, r.Close())
+	assert.Equal(t, "BBBCCC", string(data))
 }
