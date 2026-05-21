@@ -345,9 +345,9 @@ func (g *GcsEmu) handleGcsMediaRequest(baseUrl HttpBaseUrl, w http.ResponseWrite
 			}
 			return
 		}
-	}
-
-	if rangeHeader != "" {
+		// GCS silently ignores Range headers for gzip-encoded objects,
+		// so skip range handling and serve the full compressed content.
+	} else if rangeHeader != "" {
 		lo, hi, ok := parseRangeRequestHeader(rangeHeader, int64(len(contents)))
 		if !ok {
 			w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", len(contents)))

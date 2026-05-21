@@ -13,6 +13,9 @@ type byteRange struct {
 // and clamps to the given total size. Returns the inclusive lo/hi byte offsets
 // and true if a valid range was parsed.
 func parseRangeRequestHeader(header string, totalSize int64) (lo, hi int64, ok bool) {
+	if totalSize <= 0 {
+		return 0, 0, false
+	}
 	if !strings.HasPrefix(header, "bytes=") {
 		return 0, 0, false
 	}

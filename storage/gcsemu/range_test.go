@@ -37,6 +37,8 @@ func TestParseRangeRequestHeader(t *testing.T) {
 		{header: "bytes=0-0", totalSize: 500, lo: 0, hi: 0, ok: true},
 		{header: "not-a-range", totalSize: 500, lo: 0, hi: 0, ok: false},
 		{header: "bytes=500-600", totalSize: 500, lo: 0, hi: 0, ok: false},
+		{header: "bytes=0-99", totalSize: 0, lo: 0, hi: 0, ok: false},
+		{header: "bytes=-100", totalSize: 0, lo: 0, hi: 0, ok: false},
 	}
 
 	for _, tc := range tcs {
