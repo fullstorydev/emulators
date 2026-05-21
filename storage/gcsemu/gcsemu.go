@@ -347,7 +347,13 @@ func (g *GcsEmu) handleGcsMediaRequest(baseUrl HttpBaseUrl, w http.ResponseWrite
 		}
 	}
 
-	if lo, hi, ok := parseRangeRequestHeader(rangeHeader, int64(len(contents))); ok {
+	if rangeHeader != "" {
+		lo, hi, ok := parseRangeRequestHeader(rangeHeader, int64(len(contents)))
+		if !ok {
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", len(contents)))
+			w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+			return
+		}
 		sliced := contents[lo : hi+1]
 		w.Header().Set("Content-Length", strconv.Itoa(len(sliced)))
 		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", lo, hi, len(contents)))
