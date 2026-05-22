@@ -328,14 +328,18 @@ func (g *GcsEmu) handleGcsMediaRequest(baseUrl HttpBaseUrl, w http.ResponseWrite
 	w.Header().Set("Content-Disposition", obj.ContentDisposition)
 
 	if obj.ContentEncoding == "gzip" {
-		if strings.Contains(acceptEncoding, "gzip") {
+		if strings.Contains(acceptEncoding, "gzip") && rangeHeader == "" {
+			// Client accepts gzip and no range request: serve compressed content directly.
 			w.Header().Set("Content-Encoding", "gzip")
 		} else {
-			// Uncompress on behalf of the client.
+			// Decompress on behalf of the client. GCS also does this when a
+			// Range header is present on a gzip object -- the range is silently
+			// ignored and the full decompressed content is returned.
 			buf := bytes.NewBuffer(contents)
 			gzipReader, err := gzip.NewReader(buf)
 			if err != nil {
 				g.gapiError(w, http.StatusInternalServerError, fmt.Sprintf("failed to gunzip from %s/%s: %s", bucket, filename, err))
+				return
 			}
 			if _, err := io.Copy(w, gzipReader); err != nil {
 				g.gapiError(w, http.StatusInternalServerError, fmt.Sprintf("failed to copy+gunzip from %s/%s: %s", bucket, filename, err))
@@ -345,8 +349,6 @@ func (g *GcsEmu) handleGcsMediaRequest(baseUrl HttpBaseUrl, w http.ResponseWrite
 			}
 			return
 		}
-		// GCS silently ignores Range headers for gzip-encoded objects,
-		// so skip range handling and serve the full compressed content.
 	} else if rangeHeader != "" {
 		lo, hi, ok := parseRangeRequestHeader(rangeHeader, int64(len(contents)))
 		if !ok {

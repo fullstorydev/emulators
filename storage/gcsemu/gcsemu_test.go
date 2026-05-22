@@ -1,6 +1,8 @@
 package gcsemu
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/md5"
 	"errors"
@@ -38,6 +40,7 @@ var (
 		{"CopyMetadata", testCopyMetadata},
 		{"CopyConditionals", testCopyConditionals},
 		{"RangeRead", testRangeRead},
+		{"RangeReadCompressed", testRangeReadCompressed},
 	}
 )
 
@@ -598,17 +601,6 @@ func testListBuckets(t *testing.T, gcsClient *storage.Client, expect []string) {
 	assert.DeepEqual(t, expect, results)
 }
 
-func write(w *storage.Writer, content string) error {
-	n, err := io.Copy(w, strings.NewReader(content))
-	if err != nil {
-		return err
-	}
-	if n != int64(len(content)) {
-		panic("not all content sent")
-	}
-	return w.Close()
-}
-
 func testRangeRead(t *testing.T, bh BucketHandle) {
 	const name = "gcsemu-test/range.bin"
 	const content = "AAABBBCCC"
@@ -657,4 +649,65 @@ func testRangeRead(t *testing.T, bh BucketHandle) {
 	assert.NilError(t, err)
 	assert.NilError(t, r.Close())
 	assert.Equal(t, "BBBCCC", string(data))
+}
+
+func testRangeReadCompressed(t *testing.T, bh BucketHandle) {
+	const name = "gcsemu-test/range-compressed.bin"
+	const plaintext = "AAABBBCCCDDDEEEFFFGGGHHHIIIJJJKKKLLLMMMNNNOOOPPP"
+	ctx := context.Background()
+	oh := bh.Object(name)
+
+	// Compress the content and upload with ContentEncoding: gzip.
+	var compressed bytes.Buffer
+	gw := gzip.NewWriter(&compressed)
+	_, err := gw.Write([]byte(plaintext))
+	assert.NilError(t, err)
+	assert.NilError(t, gw.Close())
+
+	w := oh.NewWriter(ctx)
+	w.ContentEncoding = "gzip"
+	w.ContentType = "application/octet-stream"
+	_, err = io.Copy(w, bytes.NewReader(compressed.Bytes()))
+	assert.NilError(t, err)
+	assert.NilError(t, w.Close())
+
+	// Full read returns decompressed content transparently.
+	r, err := oh.NewReader(ctx)
+	assert.NilError(t, err)
+	data, err := io.ReadAll(r)
+	assert.NilError(t, err)
+	assert.NilError(t, r.Close())
+	assert.Equal(t, plaintext, string(data))
+
+	// GCS silently ignores Range headers for gzip-encoded objects and always
+	// returns the full decompressed content. Verified against real GCS.
+	for _, tc := range []struct {
+		name   string
+		offset int64
+		length int64
+	}{
+		{"from start", 0, 3},
+		{"from middle", 3, 3},
+		{"open-ended", 3, -1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, err := oh.NewRangeReader(ctx, tc.offset, tc.length)
+			assert.NilError(t, err)
+			data, err := io.ReadAll(r)
+			assert.NilError(t, err)
+			assert.NilError(t, r.Close())
+			assert.Equal(t, plaintext, string(data))
+		})
+	}
+}
+
+func write(w *storage.Writer, content string) error {
+	n, err := io.Copy(w, strings.NewReader(content))
+	if err != nil {
+		return err
+	}
+	if n != int64(len(content)) {
+		panic("not all content sent")
+	}
+	return w.Close()
 }
