@@ -1,6 +1,8 @@
 package gcsemu
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/md5"
 	"errors"
@@ -37,6 +39,7 @@ var (
 		{"Compose", testCompose},
 		{"CopyMetadata", testCopyMetadata},
 		{"CopyConditionals", testCopyConditionals},
+		{"RangeRead", testRangeRead},
 	}
 )
 
@@ -595,6 +598,185 @@ func testListBuckets(t *testing.T, gcsClient *storage.Client, expect []string) {
 		results = append(results, bucket.Name)
 	}
 	assert.DeepEqual(t, expect, results)
+}
+
+func testRangeRead(t *testing.T, bh BucketHandle) {
+	ctx := context.Background()
+
+	// --- Setup: plain object ---
+	const plainName = "gcsemu-test/range-plain.bin"
+	const plainContent = "AAABBBCCC"
+	err := write(bh.Object(plainName).NewWriter(ctx), plainContent)
+	assert.NilError(t, err, "write plain object failed")
+
+	// --- Setup: gzip object ---
+	const gzipName = "gcsemu-test/range-gzip.bin"
+	const gzipPlaintext = "AAABBBCCCDDDEEEFFFGGGHHHIIIJJJKKKLLLMMMNNNOOOPPP"
+	var compressed bytes.Buffer
+	gw := gzip.NewWriter(&compressed)
+	_, err = gw.Write([]byte(gzipPlaintext))
+	assert.NilError(t, err)
+	assert.NilError(t, gw.Close())
+	compressedBytes := compressed.Bytes()
+
+	w := bh.Object(gzipName).NewWriter(ctx)
+	w.ContentEncoding = "gzip"
+	w.ContentType = "application/octet-stream"
+	_, err = io.Copy(w, bytes.NewReader(compressedBytes))
+	assert.NilError(t, err)
+	assert.NilError(t, w.Close())
+
+	//
+	// CE=none, AE=none (default, no ReadCompressed): range reads work normally.
+	//
+
+	t.Run("plain/full_read", func(t *testing.T) {
+		r, err := bh.Object(plainName).NewReader(ctx)
+		assert.NilError(t, err)
+		data, err := io.ReadAll(r)
+		assert.NilError(t, err)
+		assert.NilError(t, r.Close())
+		assert.Equal(t, plainContent, string(data))
+	})
+
+	for _, tc := range []struct {
+		name   string
+		offset int64
+		length int64
+		expect string
+	}{
+		{"first", 0, 3, "AAA"},
+		{"middle", 3, 3, "BBB"},
+		{"last", 6, 3, "CCC"},
+		{"open_ended", 3, -1, "BBBCCC"},
+	} {
+		t.Run("plain/range_"+tc.name, func(t *testing.T) {
+			r, err := bh.Object(plainName).NewRangeReader(ctx, tc.offset, tc.length)
+			assert.NilError(t, err)
+			data, err := io.ReadAll(r)
+			assert.NilError(t, err)
+			assert.NilError(t, r.Close())
+			assert.Equal(t, tc.expect, string(data))
+		})
+	}
+
+	t.Run("plain/range_invalid", func(t *testing.T) {
+		_, err := bh.Object(plainName).NewRangeReader(ctx, 100, 3)
+		assert.Check(t, err != nil, "expected error for invalid range")
+		var gerr *googleapi.Error
+		assert.Check(t, errors.As(err, &gerr))
+		assert.Equal(t, http.StatusRequestedRangeNotSatisfiable, gerr.Code)
+	})
+
+	//
+	// CE=none, AE=gzip (ReadCompressed): should be identical to above since
+	// there's nothing to transcode on a non-gzip object.
+	//
+
+	t.Run("plain_compressed/full_read", func(t *testing.T) {
+		r, err := bh.Object(plainName).ReadCompressed(true).NewReader(ctx)
+		assert.NilError(t, err)
+		data, err := io.ReadAll(r)
+		assert.NilError(t, err)
+		assert.NilError(t, r.Close())
+		assert.Equal(t, plainContent, string(data))
+	})
+
+	for _, tc := range []struct {
+		name   string
+		offset int64
+		length int64
+		expect string
+	}{
+		{"first", 0, 3, "AAA"},
+		{"middle", 3, 3, "BBB"},
+		{"open_ended", 3, -1, "BBBCCC"},
+	} {
+		t.Run("plain_compressed/range_"+tc.name, func(t *testing.T) {
+			r, err := bh.Object(plainName).ReadCompressed(true).NewRangeReader(ctx, tc.offset, tc.length)
+			assert.NilError(t, err)
+			data, err := io.ReadAll(r)
+			assert.NilError(t, err)
+			assert.NilError(t, r.Close())
+			assert.Equal(t, tc.expect, string(data))
+		})
+	}
+
+	//
+	// CE=gzip, AE=none (default, no ReadCompressed): server transcodes
+	// (decompresses). GCS silently ignores Range headers when transcoding
+	// and returns the full decompressed content. Verified against real GCS.
+	//
+
+	t.Run("gzip/full_read", func(t *testing.T) {
+		r, err := bh.Object(gzipName).NewReader(ctx)
+		assert.NilError(t, err)
+		data, err := io.ReadAll(r)
+		assert.NilError(t, err)
+		assert.NilError(t, r.Close())
+		assert.Equal(t, gzipPlaintext, string(data))
+	})
+
+	for _, tc := range []struct {
+		name   string
+		offset int64
+		length int64
+	}{
+		{"from_start", 0, 3},
+		{"from_middle", 3, 3},
+		{"open_ended", 3, -1},
+	} {
+		t.Run("gzip/range_"+tc.name, func(t *testing.T) {
+			r, err := bh.Object(gzipName).NewRangeReader(ctx, tc.offset, tc.length)
+			assert.NilError(t, err)
+			data, err := io.ReadAll(r)
+			assert.NilError(t, err)
+			assert.NilError(t, r.Close())
+			assert.Equal(t, gzipPlaintext, string(data))
+		})
+	}
+
+	//
+	// CE=gzip, AE=gzip (ReadCompressed): no server transcoding, client
+	// receives raw compressed bytes. Range behavior in this mode is unclear
+	// -- log results to verify against real GCS.
+	//
+
+	t.Run("gzip_compressed/full_read", func(t *testing.T) {
+		r, err := bh.Object(gzipName).ReadCompressed(true).NewReader(ctx)
+		assert.NilError(t, err)
+		data, err := io.ReadAll(r)
+		assert.NilError(t, err)
+		assert.NilError(t, r.Close())
+		t.Logf("got %d bytes (compressed=%d, plaintext=%d)", len(data), len(compressedBytes), len(gzipPlaintext))
+		assert.DeepEqual(t, compressedBytes, data)
+	})
+
+	for _, tc := range []struct {
+		name   string
+		offset int64
+		length int64
+	}{
+		{"from_start", 0, 3},
+		{"from_middle", 3, 3},
+		{"open_ended", 3, -1},
+	} {
+		t.Run("gzip_compressed/range_"+tc.name, func(t *testing.T) {
+			r, err := bh.Object(gzipName).ReadCompressed(true).NewRangeReader(ctx, tc.offset, tc.length)
+			assert.NilError(t, err)
+			data, err := io.ReadAll(r)
+			assert.NilError(t, err)
+			assert.NilError(t, r.Close())
+
+			var expect []byte
+			if tc.length == -1 {
+				expect = compressedBytes[tc.offset:]
+			} else {
+				expect = compressedBytes[tc.offset : tc.offset+tc.length]
+			}
+			assert.DeepEqual(t, expect, data)
+		})
+	}
 }
 
 func write(w *storage.Writer, content string) error {
