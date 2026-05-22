@@ -3,11 +3,10 @@ package gcsemu
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
-	api "google.golang.org/api/storage/v1"
-	"gotest.tools/v3/assert"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -16,6 +15,9 @@ import (
 	"net/textproto"
 	"strings"
 	"testing"
+
+	api "google.golang.org/api/storage/v1"
+	"gotest.tools/v3/assert"
 )
 
 func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url string) {
@@ -222,6 +224,77 @@ func testRawHttp(t *testing.T, bh BucketHandle, httpClient *http.Client, url str
 			assert.NilError(t, err)
 			t.Log(string(body))
 			tc.checkResponse(t, rsp)
+		})
+	}
+
+	// Test X-Goog-Stored-Content-Encoding header on gzip objects.
+	const gzipObjName = "gcsemu-raw-gzip.bin"
+	{
+		var compressed bytes.Buffer
+		gw := gzip.NewWriter(&compressed)
+		_, err := gw.Write([]byte("hello world"))
+		assert.NilError(t, err)
+		assert.NilError(t, gw.Close())
+
+		ow := bh.Object(gzipObjName).NewWriter(ctx)
+		ow.ContentEncoding = "gzip"
+		ow.ContentType = "text/plain"
+		_, err = io.Copy(ow, bytes.NewReader(compressed.Bytes()))
+		assert.NilError(t, err)
+		assert.NilError(t, ow.Close())
+	}
+
+	gzipHeaderTests := []struct {
+		name           string
+		acceptEncoding string
+		rangeHeader    string
+		wantStoredCE   string
+	}{
+		{
+			name:           "gzip_transcoding",
+			acceptEncoding: "",
+			wantStoredCE:   "gzip",
+		},
+		{
+			name:           "gzip_no_transcode",
+			acceptEncoding: "gzip",
+			wantStoredCE:   "gzip",
+		},
+		{
+			name:           "gzip_transcoding_with_range",
+			acceptEncoding: "",
+			rangeHeader:    "bytes=0-2",
+			wantStoredCE:   "gzip",
+		},
+		{
+			name:           "gzip_no_transcode_with_range",
+			acceptEncoding: "gzip",
+			rangeHeader:    "bytes=0-2",
+			wantStoredCE:   "gzip",
+		},
+	}
+
+	for _, tc := range gzipHeaderTests {
+		tc := tc
+		t.Run("gzipHeaders/"+tc.name, func(t *testing.T) {
+			u := fmt.Sprintf("%s/download/storage/v1/b/%s/o/%s?alt=media", url, bh.Name, gzipObjName)
+			req, err := http.NewRequest("GET", u, nil)
+			assert.NilError(t, err)
+			if tc.acceptEncoding != "" {
+				req.Header.Set("Accept-Encoding", tc.acceptEncoding)
+			}
+			if tc.rangeHeader != "" {
+				req.Header.Set("Range", tc.rangeHeader)
+			}
+
+			rsp, err := httpClient.Do(req)
+			assert.NilError(t, err)
+			body, err := httputil.DumpResponse(rsp, true)
+			assert.NilError(t, err)
+			t.Log(string(body))
+
+			assert.Equal(t, tc.wantStoredCE, rsp.Header.Get("X-Goog-Stored-Content-Encoding"),
+				"X-Goog-Stored-Content-Encoding mismatch")
 		})
 	}
 

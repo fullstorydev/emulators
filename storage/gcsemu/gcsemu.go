@@ -324,17 +324,18 @@ func (g *GcsEmu) handleGcsMediaRequest(baseUrl HttpBaseUrl, w http.ResponseWrite
 	w.Header().Set("X-Goog-Generation", strconv.FormatInt(obj.Generation, 10))
 	w.Header().Set("X-Goog-Metageneration", strconv.FormatInt(obj.Metageneration, 10))
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Expose-Headers", "Content-Type, Content-Length, Content-Encoding, Content-Range, Date, X-Goog-Generation, X-Goog-Metageneration")
+	w.Header().Set("Access-Control-Expose-Headers", "Content-Type, Content-Length, Content-Encoding, Content-Range, Date, X-Goog-Generation, X-Goog-Metageneration, X-Goog-Stored-Content-Encoding")
 	w.Header().Set("Content-Disposition", obj.ContentDisposition)
 
 	if obj.ContentEncoding == "gzip" {
-		if strings.Contains(acceptEncoding, "gzip") && rangeHeader == "" {
-			// Client accepts gzip and no range request: serve compressed content directly.
+		w.Header().Set("X-Goog-Stored-Content-Encoding", "gzip")
+		if strings.Contains(acceptEncoding, "gzip") {
+			// No transcoding: serve compressed bytes directly. Range reads
+			// operate on the compressed bytes normally.
 			w.Header().Set("Content-Encoding", "gzip")
 		} else {
-			// Decompress on behalf of the client. GCS also does this when a
-			// Range header is present on a gzip object -- the range is silently
-			// ignored and the full decompressed content is returned.
+			// Transcoding: decompress on behalf of the client. Range headers
+			// are silently ignored when transcoding occurs.
 			buf := bytes.NewBuffer(contents)
 			gzipReader, err := gzip.NewReader(buf)
 			if err != nil {
@@ -349,7 +350,9 @@ func (g *GcsEmu) handleGcsMediaRequest(baseUrl HttpBaseUrl, w http.ResponseWrite
 			}
 			return
 		}
-	} else if rangeHeader != "" {
+	}
+
+	if rangeHeader != "" {
 		lo, hi, ok := parseRangeRequestHeader(rangeHeader, int64(len(contents)))
 		if !ok {
 			w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", len(contents)))
